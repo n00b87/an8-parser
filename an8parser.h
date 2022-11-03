@@ -1,5 +1,3 @@
-// Parser for Anim8or files
-
 #ifndef IRRAN8_H_INCLUDED
 #define IRRAN8_H_INCLUDED
 
@@ -35,6 +33,21 @@ string rtrim(string src)
 string trim(string t_string)
 {
     return ltrim(rtrim(t_string));
+}
+
+string str_replace(string src, string tgt, string rpc)
+{
+    if(tgt.length()==0)
+        return src;
+    unsigned long found_inc = rpc.length() > 0 ? rpc.length() : 1;
+    size_t found = 0;
+    found = src.find(tgt);
+    while( found != string::npos && found < src.length())
+    {
+        src = src.substr(0,found) + rpc + src.substr(found + tgt.length());
+        found = src.find(tgt,found+found_inc);
+    }
+    return src;
 }
 
 struct an8_header
@@ -248,12 +261,47 @@ struct an8_object
     std::vector<an8_component> component;
 };
 
-/*
-struct an8_figure
+struct an8_dof
 {
-
+    string axis; //X, Y, or Z
+    double min_angle;
+    double default_angle;
+    double max_angle;
+    bool locked;
+    bool unlimited;
 };
 
+struct an8_influence
+{
+    double center0;
+    double inRadius0;
+    double outRadius0;
+    double center1;
+    double inRadius1;
+    double outRadius1;
+};
+
+struct an8_bone
+{
+    string name;
+    double length;
+    double diameter; // seems to be optional
+    an8_point4f orientation;
+    bool locked; //not important, just here for completion
+    std::vector<an8_dof> dof;
+    an8_influence influence;
+    std::vector<an8_component> component;
+    std::vector<an8_bone> bone;
+};
+
+struct an8_figure
+{
+    string name;
+    std::vector<an8_material> material;
+    an8_bone bone;
+};
+
+/*
 struct an8_sequence
 {
 
@@ -287,6 +335,7 @@ struct an8_file_block
     string name;
     string obj_name;
     string value;
+    string value2;
     an8_file_block* parent;
     vector<an8_file_block> block;
 };
@@ -528,6 +577,27 @@ void getMaterial(an8_object* obj, an8_file_block* block)
 
 }
 
+void getMaterial(an8_figure* figure, an8_file_block* block)
+{
+    if(block->block.size() == 0)
+        return;
+
+    an8_file_block* c_block;
+    for(int i = 0; i < block->block.size(); i++)
+    {
+        c_block = &block->block[i];
+        if(c_block->name.compare("material")==0)
+        {
+            an8_material mat;
+            mat.name = c_block->obj_name;
+            //cout << "material name: " << mat.name << endl;
+            getSurface(&mat, c_block);
+            figure->material.push_back(mat);
+        }
+    }
+
+}
+
 void getBase(an8_base* base, an8_file_block* block)
 {
     if(block->block.size() == 0)
@@ -684,6 +754,63 @@ void getPoints3f(vector<an8_point3f>* points, an8_file_block* block)
         }
         else
             arg += c;
+    }
+
+}
+
+void getEdges(vector<an8_edge>* edges, an8_file_block* block)
+{
+    uint32_t v[3];
+    int vi = 0;
+    string arg = "";
+
+    bool in_scope = false;
+
+    //string dbg = "";
+
+    for(int i = 0; i < block->value.length(); i++)
+    {
+        string c = block->value.substr(i,1);
+
+        if(c.compare("(")==0)
+        {
+            in_scope = true;
+            arg = "";
+            vi = 0;
+            v[0] = 0;
+            v[1] = 0;
+            v[2] = -1; //default edge sharpness
+
+            //dbg = "";
+        }
+        else if(c.compare(")")==0)
+        {
+            in_scope = false;
+
+            v[vi] = atoi(arg.c_str());
+
+            an8_edge e;
+            e.point_index1 = v[0];
+            e.point_index2 = v[1];
+            e.sharpness = v[2];
+            //if(edges->size()==1)
+            //    cout << vi << " E_SHARP = " << e.point_index2 << " : " << dbg << endl;
+            edges->push_back(e);
+
+            arg = "";
+        }
+        else if(c.compare(" ")==0 && in_scope)
+        {
+            //if(edges->size() == 1 )
+            //    cout << "[" << vi << "] = " << arg << endl;
+            v[vi] = atoi(arg.c_str());
+            arg = "";
+            vi++;
+        }
+        else
+            arg += c;
+
+        //dbg += c;
     }
 
 }
@@ -955,6 +1082,16 @@ void getMesh(an8_mesh* mesh, an8_file_block* block)
             //cout << "load points: " << mesh->name << endl;
             getPoints3f(&mesh->points, c_block);
         }
+        else if(c_block->name.compare("normals")==0)
+        {
+            //cout << "load points: " << mesh->name << endl;
+            getPoints3f(&mesh->normals, c_block);
+        }
+        else if(c_block->name.compare("edges")==0)
+        {
+            //cout << "load points: " << mesh->name << endl;
+            getEdges(&mesh->edges, c_block);
+        }
         else if(c_block->name.compare("texcoords")==0)
         {
             //cout << "load points: " << mesh->name << endl;
@@ -1027,7 +1164,211 @@ void getObject(an8_project* project, an8_file_block* block)
 
 }
 
-void loadAN8(std::string an8_project_file)
+void getDOF(vector<an8_dof>* dof, an8_file_block* block)
+{
+    int vi = 0;
+    string arg = "";
+
+    //string dbg = "";
+
+    an8_dof tmp_dof;
+    tmp_dof.axis = block->obj_name;
+    tmp_dof.default_angle = 0;
+    tmp_dof.locked = false;
+    tmp_dof.max_angle = 0;
+    tmp_dof.min_angle = 0;
+    tmp_dof.unlimited = false;
+
+    string value2 = block->value2 + " ";
+
+    for(int i = 0; i < value2.length(); i++)
+    {
+        string c = value2.substr(i,1);
+
+        if(c.compare(" ")==0 && arg.compare("") != 0)
+        {
+            if(arg.compare("unlimited")==0)
+                tmp_dof.unlimited = true;
+            else if(arg.compare("locked")==0)
+                tmp_dof.locked = true;
+            else
+            {
+                switch(vi)
+                {
+                    case 0:
+                        tmp_dof.min_angle = atof(arg.c_str());
+                        break;
+                    case 1:
+                        tmp_dof.default_angle = atof(arg.c_str());
+                        break;
+                    case 2:
+                        tmp_dof.max_angle = atof(arg.c_str());
+                        break;
+                }
+
+                vi++;
+            }
+            arg = "";
+        }
+        else if(c.compare(" ") != 0)
+            arg += c;
+
+        //dbg += c;
+    }
+
+    dof->push_back(tmp_dof);
+
+}
+
+void getInfluence(an8_influence* inf, an8_file_block* block)
+{
+    double v[6];
+    int vi = 0;
+    v[0] = 0;
+    v[1] = 0;
+    v[2] = 0;
+    v[3] = 0;
+    v[4] = 0;
+    v[5] = 0;
+    string arg = "";
+    string b_value = trim(block->value) + " ;";
+
+    for(int i = 0; i < b_value.length(); i++)
+    {
+        string c = b_value.substr(i,1);
+
+        if(c.compare(";")==0)
+        {
+            inf->center0 = v[0];
+            inf->inRadius0 = v[1];
+            inf->outRadius0 = v[2];
+            inf->center1 = v[3];
+            inf->inRadius1 = v[4];
+            inf->outRadius1 = v[5];
+            break;
+        }
+        else if(c.compare(" ")==0)
+        {
+            v[vi] = atof(arg.c_str());
+            arg = "";
+            vi++;
+        }
+        else
+            arg += c;
+    }
+
+}
+
+void getBone(an8_bone* bone, an8_file_block* block)
+{
+    if(block->block.size() == 0)
+        return;
+
+    an8_file_block* c_block;
+
+    bone->name = block->obj_name;
+    cout << endl << "BONE [" << bone->name << "]" << endl;
+
+    an8_base base;
+    getBase(&base, block);
+    bone->orientation = base.orientation;
+    //cout << "orientation: " << bone->orientation.x << ", "
+      //                      << bone->orientation.y << ", "
+        //                    << bone->orientation.z << ", "
+          //                  << bone->orientation.w << endl;
+
+    for(int i = 0; i < block->block.size(); i++)
+    {
+        c_block = &block->block[i];
+
+        if(c_block->name.compare("bone")==0)
+        {
+            cout << "FOUND SUB BONE" << endl;
+            an8_bone sub_bone;
+            getBone(&sub_bone, c_block);
+            bone->bone.push_back(sub_bone);
+        }
+        else if(c_block->name.compare("length")==0)
+        {
+            bone->length = atof(c_block->value.c_str());
+            cout << "length: " << bone->length << endl;
+        }
+        else if(c_block->name.compare("diameter")==0)
+        {
+            bone->diameter = atof(c_block->obj_name.c_str());
+        }
+        else if(c_block->name.compare("locked")==0)
+        {
+            bone->locked = true;
+        }
+        else if(c_block->name.compare("dof")==0)
+        {
+            getDOF(&bone->dof, c_block);
+
+            an8_dof dof = bone->dof[bone->dof.size()-1];
+            cout << "-->DOF: " << dof.axis << " "
+                 << dof.min_angle << " "
+                 << dof.default_angle << " "
+                 << dof.max_angle << " "
+                 << (dof.locked ? "true" : "false" ) << " "
+                 << (dof.unlimited ? "true" : "false") << endl;
+        }
+        else if(c_block->name.compare("influence")==0)
+        {
+            getInfluence(&bone->influence, c_block);
+
+            an8_influence inf = bone->influence;
+            cout << "-->INFLUENCE = " << inf.center0 << ", "
+                                      << inf.inRadius0 << ", "
+                                      << inf.outRadius0 << ", "
+                                      << inf.center1 << ", "
+                                      << inf.inRadius1 << ", "
+                                      << inf.outRadius1 << endl;
+        }
+    }
+
+}
+
+void getFigure(an8_project* project, an8_file_block* block)
+{
+    if(block->block.size() == 0)
+        return;
+
+    an8_file_block* c_block;
+    for(int i = 0; i < block->block.size(); i++)
+    {
+        c_block = &block->block[i];
+        if(c_block->name.compare("figure")==0)
+        {
+            cout << "figure_name = " << c_block->obj_name << endl;
+            an8_figure figure;
+            figure.name = c_block->obj_name;
+            getMaterial(&figure, c_block);
+
+            an8_bone root_bone;
+            an8_file_block* c2_block;
+
+            for(int i = 0; i < c_block->block.size(); i++)
+            {
+                c2_block = &c_block->block[i];
+                if(c2_block->name.compare("bone")==0)
+                {
+                    getBone(&root_bone, c2_block);
+                    break;
+                }
+            }
+
+            //getComponent(&obj, c_block);
+            //project->objects.push_back(obj);
+        }
+
+        //if(c_block->name.length() < 30)
+          //  cout << "cblock_name = [" << c_block->name << "]" << endl;
+    }
+
+}
+
+an8_project loadAN8(std::string an8_project_file)
 {
     an8_project project;
     int an8_file_scope = 0;
@@ -1061,6 +1402,9 @@ void loadAN8(std::string an8_project_file)
 
     an8_header header;
 
+    stack<string> value2_stack;
+    string value2 = "";
+
     for(int i = 0; i < an8_file_content.length(); i++)
     {
         string c = an8_file_content.substr(i,1);
@@ -1092,6 +1436,12 @@ void loadAN8(std::string an8_project_file)
         }
         else if(c.compare("{")==0)
         {
+            value2_stack.push(value2);
+            value2 = "";
+
+            if(c_block->value.compare("")==0)
+                c_block->value = token;
+
             an8_file_block b;
             b.name = trim(token);
             b.start_index = i+1;
@@ -1124,14 +1474,30 @@ void loadAN8(std::string an8_project_file)
 
             token = "";
             curly_scope--;
+
+
+            if(value2_stack.size()>0)
+            {
+                c_block->value2 = value2_stack.top();
+                value2_stack.pop();
+            }
+            else
+                c_block->value2 = value2;
+
+            value2 = "";
         }
         else
+        {
             token += c;
+            value2 += c;
+        }
 
     }
 
     getHeader(&project, &block);
     getObject(&project, &block);
+    getFigure(&project, &block);
+    return project;
 
     cout <<"Num Objects = " << project.objects.size() << endl << endl;
 
@@ -1185,12 +1551,33 @@ void loadAN8(std::string an8_project_file)
                         cout << "    material_name = " << mesh.materialname[mesh_a] << endl;
                     }
 
+                    cout << "EDGE DBG" << endl;
+
+                    if(mesh.edges.size() > 0)
+                        cout << mesh.edges[1].point_index1 << ", "
+                             << mesh.edges[1].point_index2 << ", "
+                             << mesh.edges[1].sharpness << endl;
+
+                    cout << "EDGE DBG END" << endl;
+
+                    cout << "NORMAL DBG" << endl;
+
+                    if(mesh.edges.size() > 0)
+                        cout << mesh.normals[1].x << ", "
+                             << mesh.normals[1].y << ", "
+                             << mesh.normals[1].z << endl;
+
+                    cout << "NORMAL DBG END" << endl;
+
+
                     break;
             }
         }
 
         cout << endl;
     }
+
+    return project;
 
 }
 
