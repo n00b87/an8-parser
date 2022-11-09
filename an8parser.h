@@ -7,6 +7,8 @@
 #include <stack>
 #include <string>
 
+#define AN8_DEBUG 1
+
 using namespace std;
 
 string ltrim(string l_string)
@@ -223,6 +225,26 @@ struct an8_mesh
     vector<an8_facedata> faces;
 };
 
+struct an8_name
+{
+    string name;
+};
+
+struct an8_weightedBy
+{
+    string bone_name;
+};
+
+struct an8_namedobject
+{
+    string name;
+    an8_name name_block;
+    an8_base base;
+    an8_base pivot;
+    an8_material material;
+    vector<an8_weightedBy> weightedBy;
+};
+
 #define AN8_COMPONENT_TYPE_MESH         0
 #define AN8_COMPONENT_TYPE_SPHERE       1
 #define AN8_COMPONENT_TYPE_CYLINDER     2
@@ -247,7 +269,7 @@ struct an8_component
     //textcom
     //modifier
     //image
-    //namedobject
+    an8_namedobject named_object;
     //group
 
     an8_base base;
@@ -359,7 +381,9 @@ void getHeader(an8_project* project, an8_file_block* block)
                 else if(c_block->block[j].name.compare("build")==0)
                     project->header.build = c_block->block[j].obj_name;
 
-                //cout << "header attribute[" << c_block->block[j].name << "] = " << c_block->block[j].obj_name << endl;
+                #ifdef AN8_DEBUG
+                cout << "header attribute[" << c_block->block[j].name << "] = " << c_block->block[j].obj_name << endl;
+                #endif
             }
             break;
         }
@@ -416,8 +440,7 @@ void getSurfaceProperty(an8_surface_property* surf_property, an8_file_block* blo
         c_block = &block->block[i];
         if(c_block->name.compare("rgb")==0)
         {
-            string c_value = c_block->value + " "; //adding extra space for delimeter
-            //cout << "c_value = " << c_block->value << endl;
+            string c_value = c_block->value + " ";
             string c_str = "";
             uint8_t c[3];
             int ci = 0;
@@ -431,7 +454,7 @@ void getSurfaceProperty(an8_surface_property* surf_property, an8_file_block* blo
                     if(ci >= 3)
                         break;
                 }
-                //cout << "header attribute[" << c_block->block[j].name << "] = " << c_block->block[j].obj_name << endl;
+
             }
 
             an8_color color;
@@ -569,7 +592,6 @@ void getMaterial(an8_object* obj, an8_file_block* block)
         {
             an8_material mat;
             mat.name = c_block->obj_name;
-            //cout << "material name: " << mat.name << endl;
             getSurface(&mat, c_block);
             obj->material.push_back(mat);
         }
@@ -590,7 +612,6 @@ void getMaterial(an8_figure* figure, an8_file_block* block)
         {
             an8_material mat;
             mat.name = c_block->obj_name;
-            //cout << "material name: " << mat.name << endl;
             getSurface(&mat, c_block);
             figure->material.push_back(mat);
         }
@@ -626,8 +647,6 @@ void getBase(an8_base* base, an8_file_block* block)
             v_point[2] = 0;
             int vi = 0;
             string c_value = c_block->value + " ";
-
-            //cout << "origin c_Value = " << c_value << endl;
 
             for(int n = 0; n < c_value.length(); n++)
             {
@@ -703,7 +722,9 @@ void getMaterialList(vector<string>* mat_list, an8_file_block* block)
         c_block = &block->block[i];
         if(c_block->name.compare("materialname")==0)
         {
+            #ifdef AN8_DEBUG
             //cout << "material list add -> " << c_block->obj_name << endl;
+            #endif // AN8_DEBUG
             mat_list->push_back(c_block->obj_name);
         }
     }
@@ -766,8 +787,6 @@ void getEdges(vector<an8_edge>* edges, an8_file_block* block)
 
     bool in_scope = false;
 
-    //string dbg = "";
-
     for(int i = 0; i < block->value.length(); i++)
     {
         string c = block->value.substr(i,1);
@@ -781,7 +800,6 @@ void getEdges(vector<an8_edge>* edges, an8_file_block* block)
             v[1] = 0;
             v[2] = -1; //default edge sharpness
 
-            //dbg = "";
         }
         else if(c.compare(")")==0)
         {
@@ -793,16 +811,12 @@ void getEdges(vector<an8_edge>* edges, an8_file_block* block)
             e.point_index1 = v[0];
             e.point_index2 = v[1];
             e.sharpness = v[2];
-            //if(edges->size()==1)
-            //    cout << vi << " E_SHARP = " << e.point_index2 << " : " << dbg << endl;
             edges->push_back(e);
 
             arg = "";
         }
         else if(c.compare(" ")==0 && in_scope)
         {
-            //if(edges->size() == 1 )
-            //    cout << "[" << vi << "] = " << arg << endl;
             v[vi] = atoi(arg.c_str());
             arg = "";
             vi++;
@@ -810,7 +824,6 @@ void getEdges(vector<an8_edge>* edges, an8_file_block* block)
         else
             arg += c;
 
-        //dbg += c;
     }
 
 }
@@ -843,8 +856,6 @@ void getUV(vector<an8_uv>* texcoords, an8_file_block* block)
             {
                 v[1] = atof(arg.c_str());
             }
-
-            //cout << "UV [" << texcoords->size() << "] = " << v[0] << ", " << v[1] << endl;
 
             an8_uv t;
             t.u = v[0];
@@ -909,21 +920,6 @@ void getPoints2i(vector<an8_point2i>* points, an8_file_block* block)
 
 }
 
-/*
-#define AN8_FACE_SF_SHOW_BACK   1
-#define AN8_FACE_SF_HAS_NORMALS 2
-#define AN8_FACE_SF_HAS_TEXTURE 4
-
-struct an8_facedata
-{
-    int32_t num_points;
-    uint8_t flags; //bitmask
-    uint32_t material_index;
-    int32_t flat_normal_index; //index in normal array or -1 if no value is stored in an8 file
-    vector<an8_pointdata> point_data;
-};
-*/
-
 void getFaces(vector<an8_facedata>* faces, an8_file_block* block)
 {
     int v[4];
@@ -987,6 +983,7 @@ void getFaces(vector<an8_facedata>* faces, an8_file_block* block)
                     face.point_data.push_back(point_data[fp]);
 
 
+                #ifdef AN8_DEBUG
                 /*
                 if(faces->size() < 5)
                 {
@@ -1003,6 +1000,7 @@ void getFaces(vector<an8_facedata>* faces, an8_file_block* block)
                     cout << ")" << endl;
                 }
                 */
+                #endif // AN8_DEBUG
 
                 faces->push_back(face);
 
@@ -1023,8 +1021,6 @@ void getFaces(vector<an8_facedata>* faces, an8_file_block* block)
                 if(fi >= 4)
                     continue;
 
-                //if(faces->size() < 5)
-                //    cout << "f_Data insert [" << arg << "]" << endl;
                 f_data[fi] = atoi(arg.c_str());
                 arg = "";
                 fi++;
@@ -1079,35 +1075,93 @@ void getMesh(an8_mesh* mesh, an8_file_block* block)
         }
         else if(c_block->name.compare("points")==0)
         {
-            //cout << "load points: " << mesh->name << endl;
             getPoints3f(&mesh->points, c_block);
         }
         else if(c_block->name.compare("normals")==0)
         {
-            //cout << "load points: " << mesh->name << endl;
             getPoints3f(&mesh->normals, c_block);
         }
         else if(c_block->name.compare("edges")==0)
         {
-            //cout << "load points: " << mesh->name << endl;
             getEdges(&mesh->edges, c_block);
         }
         else if(c_block->name.compare("texcoords")==0)
         {
-            //cout << "load points: " << mesh->name << endl;
-            //if(mesh->name.compare("mesh0145")==0)
             getUV(&mesh->texcoords, c_block);
         }
         else if(c_block->name.compare("faces")==0)
         {
-            //if(mesh->name.compare("mesh0145")==0)
             getFaces(&mesh->faces, c_block);
         }
     }
 
 }
 
-void getComponent(an8_object* obj, an8_file_block* block)
+void getNamedObject(an8_namedobject* named_object, an8_file_block* block)
+{
+    if(block->block.size() == 0)
+        return;
+
+    an8_file_block* c_block;
+
+    named_object->name = block->obj_name;
+
+    named_object->material.name = "";
+
+    named_object->base.origin.x = 0;
+    named_object->base.origin.y = 0;
+    named_object->base.origin.z = 0;
+    named_object->base.orientation.x = 0;
+    named_object->base.orientation.y = 0;
+    named_object->base.orientation.z = 0;
+    named_object->base.orientation.w = 0;
+
+    named_object->pivot.origin.x = 0;
+    named_object->pivot.origin.y = 0;
+    named_object->pivot.origin.z = 0;
+    named_object->pivot.orientation.x = 0;
+    named_object->pivot.orientation.y = 0;
+    named_object->pivot.orientation.z = 0;
+    named_object->pivot.orientation.w = 0;
+
+    for(int i = 0; i < block->block.size(); i++)
+    {
+        c_block = &block->block[i];
+
+        if(c_block->name.compare("name")==0)
+        {
+            named_object->name_block.name = c_block->obj_name;
+        }
+        else if(c_block->name.compare("base")==0)
+        {
+            an8_base base;
+            getBase(&base, c_block);
+            named_object->base = base;
+        }
+        else if(c_block->name.compare("pivot")==0)
+        {
+            an8_base base;
+            getBase(&base, c_block);
+            named_object->pivot = base;
+        }
+        else if(c_block->name.compare("material")==0)
+        {
+            an8_material mat;
+            mat.name = c_block->obj_name;
+            getSurface(&mat, c_block);
+            named_object->material = mat;
+        }
+        else if(c_block->name.compare("weightedby")==0)
+        {
+            an8_weightedBy wb;
+            wb.bone_name = c_block->obj_name;
+            named_object->weightedBy.push_back(wb);
+        }
+    }
+
+}
+
+void getComponent(vector<an8_component>* component_list, an8_file_block* block)
 {
     if(block->block.size() == 0)
         return;
@@ -1133,7 +1187,41 @@ void getComponent(an8_object* obj, an8_file_block* block)
             component.mesh = mesh;
             component.type = AN8_COMPONENT_TYPE_MESH;
 
-            obj->component.push_back(component);
+            component_list->push_back(component);
+        }
+        else if(c_block->name.compare("namedobject")==0)
+        {
+            an8_namedobject named_object;
+
+            getNamedObject(&named_object, c_block);
+
+            #ifdef AN8_DEBUG
+            cout << "--NAMED OBJECT--" << endl;
+            cout << "Obj Name: " << named_object.name << endl;
+            cout << "Name Block: " << named_object.name_block.name << endl;
+            cout << "Base: " << named_object.base.origin.x << ", "
+                              << named_object.base.origin.y << ", "
+                              << named_object.base.origin.z << endl;
+            cout << "Pivot: " << named_object.pivot.origin.x << ", "
+                              << named_object.pivot.origin.y << ", "
+                              << named_object.pivot.origin.z << endl;
+            cout << "Material: " << named_object.material.name << endl;
+
+            for(int wb_index = 0; wb_index < named_object.weightedBy.size(); wb_index++)
+            {
+                cout << "Weighted By: " << named_object.weightedBy[wb_index].bone_name << endl;
+            }
+
+            cout << endl << endl;
+            #endif // AN8_DEBUG
+
+            an8_component component;
+            component.named_object = named_object;
+            component.type = AN8_COMPONENT_TYPE_NAMEDOBJECT;
+
+            component_list->push_back(component);
+
+
         }
     }
 
@@ -1150,16 +1238,12 @@ void getObject(an8_project* project, an8_file_block* block)
         c_block = &block->block[i];
         if(c_block->name.compare("object")==0)
         {
-            //cout << "obj_name = " << c_block->obj_name << endl;
             an8_object obj;
             obj.name = c_block->obj_name;
             getMaterial(&obj, c_block);
-            getComponent(&obj, c_block);
+            getComponent(&obj.component, c_block);
             project->objects.push_back(obj);
         }
-
-        //if(c_block->name.length() < 30)
-          //  cout << "cblock_name = [" << c_block->name << "]" << endl;
     }
 
 }
@@ -1169,7 +1253,6 @@ void getDOF(vector<an8_dof>* dof, an8_file_block* block)
     int vi = 0;
     string arg = "";
 
-    //string dbg = "";
 
     an8_dof tmp_dof;
     tmp_dof.axis = block->obj_name;
@@ -1212,8 +1295,6 @@ void getDOF(vector<an8_dof>* dof, an8_file_block* block)
         }
         else if(c.compare(" ") != 0)
             arg += c;
-
-        //dbg += c;
     }
 
     dof->push_back(tmp_dof);
@@ -1267,15 +1348,16 @@ void getBone(an8_bone* bone, an8_file_block* block)
     an8_file_block* c_block;
 
     bone->name = block->obj_name;
+
+    #ifdef AN8_DEBUG
     cout << endl << "BONE [" << bone->name << "]" << endl;
+    #endif // AN8_DEBUG
 
     an8_base base;
     getBase(&base, block);
     bone->orientation = base.orientation;
-    //cout << "orientation: " << bone->orientation.x << ", "
-      //                      << bone->orientation.y << ", "
-        //                    << bone->orientation.z << ", "
-          //                  << bone->orientation.w << endl;
+
+    getComponent(&bone->component, block);
 
     for(int i = 0; i < block->block.size(); i++)
     {
@@ -1283,7 +1365,6 @@ void getBone(an8_bone* bone, an8_file_block* block)
 
         if(c_block->name.compare("bone")==0)
         {
-            cout << "FOUND SUB BONE" << endl;
             an8_bone sub_bone;
             getBone(&sub_bone, c_block);
             bone->bone.push_back(sub_bone);
@@ -1291,7 +1372,9 @@ void getBone(an8_bone* bone, an8_file_block* block)
         else if(c_block->name.compare("length")==0)
         {
             bone->length = atof(c_block->value.c_str());
+            #ifdef AN8_DEBUG
             cout << "length: " << bone->length << endl;
+            #endif // AN8_DEBUG
         }
         else if(c_block->name.compare("diameter")==0)
         {
@@ -1306,24 +1389,28 @@ void getBone(an8_bone* bone, an8_file_block* block)
             getDOF(&bone->dof, c_block);
 
             an8_dof dof = bone->dof[bone->dof.size()-1];
+            #ifdef AN8_DEBUG
             cout << "-->DOF: " << dof.axis << " "
                  << dof.min_angle << " "
                  << dof.default_angle << " "
                  << dof.max_angle << " "
                  << (dof.locked ? "true" : "false" ) << " "
                  << (dof.unlimited ? "true" : "false") << endl;
+            #endif // AN8_DEBUG
         }
         else if(c_block->name.compare("influence")==0)
         {
             getInfluence(&bone->influence, c_block);
 
             an8_influence inf = bone->influence;
+            #ifdef AN8_DEBUG
             cout << "-->INFLUENCE = " << inf.center0 << ", "
                                       << inf.inRadius0 << ", "
                                       << inf.outRadius0 << ", "
                                       << inf.center1 << ", "
                                       << inf.inRadius1 << ", "
                                       << inf.outRadius1 << endl;
+            #endif // AN8_DEBUG
         }
     }
 
@@ -1340,7 +1427,10 @@ void getFigure(an8_project* project, an8_file_block* block)
         c_block = &block->block[i];
         if(c_block->name.compare("figure")==0)
         {
+            #ifdef AN8_DEBUG
             cout << "figure_name = " << c_block->obj_name << endl;
+            #endif // AN8_DEBUG
+
             an8_figure figure;
             figure.name = c_block->obj_name;
             getMaterial(&figure, c_block);
@@ -1358,12 +1448,8 @@ void getFigure(an8_project* project, an8_file_block* block)
                 }
             }
 
-            //getComponent(&obj, c_block);
-            //project->objects.push_back(obj);
         }
 
-        //if(c_block->name.length() < 30)
-          //  cout << "cblock_name = [" << c_block->name << "]" << endl;
     }
 
 }
@@ -1459,9 +1545,6 @@ an8_project loadAN8(std::string an8_project_file)
         }
         else if(c.compare("}")==0)
         {
-            //if(c_block->name.compare("rgb")==0)
-            //    cout << "rgb: " << token << endl;
-
             c_block->value = trim(token);
 
             block_index.pop_back();
