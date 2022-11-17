@@ -323,12 +323,72 @@ struct an8_figure
     an8_bone bone;
 };
 
-/*
-struct an8_sequence
+struct an8_floatkey
 {
-
+    uint32_t frame_index;
+    double value;
+    string mod_string;
 };
 
+struct an8_floattrack
+{
+    vector<an8_floatkey> floatkey;
+};
+
+struct an8_pointkey
+{
+    uint32_t frame_index;
+    an8_point3f value;
+    an8_point3f forward_vector;
+    an8_point3f reverse_vector;
+    string mod_string;
+};
+
+struct an8_pointtrack
+{
+    vector<an8_pointkey> pointkey;
+};
+
+struct an8_qkey
+{
+    uint32_t frame_index;
+    an8_point4f value;
+    string mod_string;
+};
+
+struct an8_qtrack
+{
+    vector<an8_qkey> qkey;
+};
+
+struct an8_booleankey
+{
+    uint32_t frame_index;
+    bool value;
+    string mod_string;
+};
+
+struct an8_booleantrack
+{
+    vector<an8_booleankey> booleankey;
+};
+
+struct an8_jointangle
+{
+    string bone_name;
+    string axis;
+    an8_floattrack floattrack;
+};
+
+struct an8_sequence
+{
+    string name;
+    string figure_name;
+    uint32_t num_frames;
+    vector<an8_jointangle> jointangle;
+};
+
+/*
 struct an8_scene
 {
 
@@ -344,8 +404,8 @@ struct an8_project
     vector<an8_material> materials;
     vector<an8_object> objects;
 
-    //figures
-    //sequences
+    vector<an8_figure> figures;
+    vector<an8_sequence> sequences;
     //scenes
 };
 
@@ -358,6 +418,7 @@ struct an8_file_block
     string obj_name;
     string value;
     string value2;
+    string value3;
     an8_file_block* parent;
     vector<an8_file_block> block;
 };
@@ -1448,6 +1509,68 @@ void getFigure(an8_project* project, an8_file_block* block)
                 }
             }
 
+            figure.bone = root_bone;
+
+            project->figures.push_back(figure);
+
+        }
+
+    }
+
+}
+
+void getSequence(an8_project* project, an8_file_block* block)
+{
+    if(block->block.size() == 0)
+        return;
+
+    an8_file_block* c_block;
+    for(int i = 0; i < block->block.size(); i++)
+    {
+        c_block = &block->block[i];
+        if(c_block->name.compare("sequence")==0)
+        {
+            an8_sequence sequence;
+            sequence.name = c_block->obj_name;
+
+            #ifdef AN8_DEBUG
+            cout << "sequence_name = " << sequence.name << endl;
+            #endif // AN8_DEBUG
+
+            an8_file_block* c2_block;
+
+            for(int i = 0; i < c_block->block.size(); i++)
+            {
+                c2_block = &c_block->block[i];
+                if(c2_block->name.compare("figure")==0)
+                {
+                    sequence.figure_name = c2_block->obj_name;
+                    cout << "figure_name = " << sequence.figure_name << endl;
+
+                }
+                else if(c2_block->name.compare("frames")==0)
+                {
+                    sequence.num_frames = atoi(c2_block->value.c_str());
+                    cout << "frame_count = " << sequence.num_frames << endl;
+
+                }
+                else if(c2_block->name.compare("jointangle")==0)
+                {
+                    an8_jointangle jointangle;
+                    jointangle.bone_name = c2_block->value3;
+                    cout << "jointangle_val3 = " << jointangle.bone_name << endl;
+
+
+                    sequence.jointangle.push_back(jointangle);
+                }
+                else
+                {
+                    cout << "data obj (" << c2_block->name << ")" << endl;
+                }
+            }
+
+            project->sequences.push_back(sequence);
+
         }
 
     }
@@ -1490,6 +1613,7 @@ an8_project loadAN8(std::string an8_project_file)
 
     stack<string> value2_stack;
     string value2 = "";
+    string value3 = "";
 
     for(int i = 0; i < an8_file_content.length(); i++)
     {
@@ -1505,6 +1629,7 @@ an8_project loadAN8(std::string an8_project_file)
             value = value.substr(0, close_str);
             c_block->obj_name = value;
             i += close_str+1;
+            c_block->value3 += "\"" + value + "\" ";
             continue;
         }
         else if(start_comment.compare("/*")==0)
@@ -1577,9 +1702,10 @@ an8_project loadAN8(std::string an8_project_file)
 
     }
 
-    getHeader(&project, &block);
-    getObject(&project, &block);
-    getFigure(&project, &block);
+    //getHeader(&project, &block);
+    //getObject(&project, &block);
+    //getFigure(&project, &block);
+    getSequence(&project, &block);
     return project;
 
     cout <<"Num Objects = " << project.objects.size() << endl << endl;
