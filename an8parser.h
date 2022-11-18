@@ -330,11 +330,6 @@ struct an8_floatkey
     string mod_string;
 };
 
-struct an8_floattrack
-{
-    vector<an8_floatkey> floatkey;
-};
-
 struct an8_pointkey
 {
     uint32_t frame_index;
@@ -344,21 +339,11 @@ struct an8_pointkey
     string mod_string;
 };
 
-struct an8_pointtrack
-{
-    vector<an8_pointkey> pointkey;
-};
-
 struct an8_qkey
 {
     uint32_t frame_index;
     an8_point4f value;
     string mod_string;
-};
-
-struct an8_qtrack
-{
-    vector<an8_qkey> qkey;
 };
 
 struct an8_booleankey
@@ -368,8 +353,18 @@ struct an8_booleankey
     string mod_string;
 };
 
-struct an8_booleantrack
+#define TRACK_TYPE_NONE         0
+#define TRACK_TYPE_FLOAT        1
+#define TRACK_TYPE_POINT        2
+#define TRACK_TYPE_QUATERNION   3
+#define TRACK_TYPE_BOOLEAN      4
+
+struct an8_track
 {
+    int track_type;
+    vector<an8_floatkey> floatkey;
+    vector<an8_pointkey> pointkey;
+    vector<an8_qkey> qkey;
     vector<an8_booleankey> booleankey;
 };
 
@@ -377,7 +372,7 @@ struct an8_jointangle
 {
     string bone_name;
     string axis;
-    an8_floattrack floattrack;
+    an8_track track;
 };
 
 struct an8_sequence
@@ -1519,6 +1514,115 @@ void getFigure(an8_project* project, an8_file_block* block)
 
 }
 
+void getFloatKey(an8_floatkey* key, an8_file_block* block)
+{
+
+    an8_file_block* c_block;
+
+    string value = trim(block->value);
+
+    int key_index = 0;
+
+    string c_arg = "";
+
+    int m_start = block->value3.find_first_of("\"") + 1;
+    int m_end = block->value3.substr(m_start).find_first_of("\"")+1;
+
+    if(m_start != string::npos && m_end != string::npos)
+        key->mod_string = block->value3.substr(m_start, m_end-m_start);
+    else
+        key->mod_string = "";
+
+    for(int i = 0; i < value.length(); i++)
+    {
+        string c = value.substr(i,1);
+
+        if(c.compare(" ")==0)
+        {
+            switch(key_index)
+            {
+                case 0:
+                    key->frame_index = atoi(c_arg.c_str());
+                    break;
+                case 1:
+                    key->value = atof(c_arg.c_str());
+                    break;
+            }
+            c_arg = "";
+            key_index++;
+        }
+        else
+            c_arg += c;
+    }
+
+}
+
+void getTrack(an8_track* track, an8_file_block* block)
+{
+    if(block->block.size() == 0)
+        return;
+
+    an8_file_block* c_block;
+
+    for(int i = 0; i < block->block.size(); i++)
+    {
+        c_block = &block->block[i];
+
+        if(c_block->name.compare("floatkey")==0)
+        {
+            an8_floatkey key;
+            getFloatKey(&key, c_block);
+            cout << "key frame = " << key.frame_index << endl;
+            cout << "key value = " << key.value << endl;
+            cout << "key mod = " << key.mod_string << endl;
+
+            track->track_type = TRACK_TYPE_FLOAT;
+            track->floatkey.push_back(key);
+            //cout << "Float Key = " << c_block->value << endl;
+            //named_object->name_block.name = c_block->obj_name;
+        }
+    }
+
+}
+
+void getJointAngle(an8_jointangle* jointangle, an8_file_block* block)
+{
+    if(block->block.size() == 0)
+        return;
+
+    an8_file_block* c_block;
+
+    string ja_val3 = block->value3;
+
+    int bn_start = ja_val3.find_first_of("\"") + 1;
+    int bn_end = ja_val3.substr(bn_start).find_first_of("\"")+1;
+
+    int axis_start = bn_end + ja_val3.substr(bn_end+1).find_first_of("\"")+2;
+    int axis_end = axis_start + ja_val3.substr(axis_start).find_first_of("\"");
+
+    jointangle->bone_name = ja_val3.substr(bn_start, bn_end-bn_start);
+    jointangle->axis = ja_val3.substr(axis_start, axis_end-axis_start);
+
+    cout << "VAL3 = " << ja_val3 << endl;
+    cout << "bone name =[" << jointangle->bone_name << "]" << endl;
+    cout << "axis =[" << jointangle->axis << "]" << endl;
+
+
+    for(int i = 0; i < block->block.size(); i++)
+    {
+        c_block = &block->block[i];
+
+        if(c_block->name.compare("track")==0)
+        {
+            cout << "GET TRACK" << endl;
+            getTrack(&jointangle->track, c_block);
+
+            //named_object->name_block.name = c_block->obj_name;
+        }
+    }
+
+}
+
 void getSequence(an8_project* project, an8_file_block* block)
 {
     if(block->block.size() == 0)
@@ -1557,8 +1661,11 @@ void getSequence(an8_project* project, an8_file_block* block)
                 else if(c2_block->name.compare("jointangle")==0)
                 {
                     an8_jointangle jointangle;
-                    jointangle.bone_name = c2_block->value3;
-                    cout << "jointangle_val3 = " << jointangle.bone_name << endl;
+
+                    getJointAngle(&jointangle, c2_block);
+
+                    //jointangle.bone_name = c2_block->value3;
+                    //cout << "jointangle_val3 = " << jointangle.bone_name << endl;
 
 
                     sequence.jointangle.push_back(jointangle);
@@ -1702,9 +1809,9 @@ an8_project loadAN8(std::string an8_project_file)
 
     }
 
-    //getHeader(&project, &block);
-    //getObject(&project, &block);
-    //getFigure(&project, &block);
+    getHeader(&project, &block);
+    getObject(&project, &block);
+    getFigure(&project, &block);
     getSequence(&project, &block);
     return project;
 
