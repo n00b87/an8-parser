@@ -7,7 +7,7 @@
 #include <stack>
 #include <string>
 
-#define AN8_DEBUG 1
+//#define AN8_DEBUG 1
 
 using namespace std;
 
@@ -383,12 +383,112 @@ struct an8_sequence
     vector<an8_jointangle> jointangle;
 };
 
-/*
+struct an8_panorama
+{
+    double left_longitude;
+    double right_longitude;
+    double bottom_latitude;
+    double top_latitude;
+};
+
+#define IMAGE_TYPE_NORMAL   0
+#define IMAGE_TYPE_PANORAMA 1
+
+struct an8_image
+{
+    string filename;
+    uint32_t image_type;;
+    an8_panorama panorama;
+};
+
+struct an8_fog
+{
+    an8_color color;
+    double fog_start;
+    double fog_end;
+    uint32_t fog_percent;
+    bool radial;
+};
+
+
+struct an8_controller
+{
+    string name;
+    an8_track track;
+};
+
+struct an8_namedsequence
+{
+    string name;
+    uint32_t frame_num;
+};
+
+#define ELEMENT_TYPE_CAMERA 1
+#define ELEMENT_TYPE_FIGURE 2
+#define ELEMENT_TYPE_OBJECT 3
+#define ELEMENT_TYPE_LIGHT  4
+#define ELEMENT_TYPE_NULL   0
+
+#define ORIENT_RELATIVE_TO_FACESPATH    1
+#define ORIENT_RELATIVE_TO_FACESTARGET  2
+#define ORIENT_RELATIVE_TO_ORIENTTARGET 3
+
+#define LIGHT_TYPE_INFINITE 1
+#define LIGHT_TYPE_LOCAL    2
+#define LIGHT_TYPE_SPOT     3
+
+struct an8_element
+{
+    uint32_t element_type;
+    string name;
+    an8_point3f loc;
+    an8_point4f orientation;
+    bool roll;
+    uint32_t orient_relative_to;
+    string bound_target; //if it has the facestarget or orienttarget chunk
+    double scale;
+    bool locked;
+
+    double fov; // camera
+
+    an8_color color; // light
+    uint32_t light_type;
+    double in_radius;
+    double out_radius;
+    double in_angle;
+    double out_angle;
+    bool cast_shadow;
+    bool raytrace_shadow;
+    bool soft_edges;
+    double soft_size;
+    uint32_t min_samples;
+    uint32_t max_samples;
+    bool monte_carlo;
+
+    string obj_name; // object
+    bool visible;
+    bool receive_shadow;
+
+    vector<an8_namedsequence> named_sequence; // figure
+
+    vector<an8_controller> controller;
+    vector<an8_element> element; //child elements
+};
+
 struct an8_scene
 {
-
+    string name;
+    uint32_t num_frames;
+    bool groundgrid;
+    double shadowbias;
+    an8_color background;
+    an8_image image;
+    an8_fog fog;
+    double znear;
+    double zfar;
+    vector<an8_element> elements;
 };
-*/
+
 
 struct an8_project
 {
@@ -401,7 +501,7 @@ struct an8_project
 
     vector<an8_figure> figures;
     vector<an8_sequence> sequences;
-    //scenes
+    vector<an8_scene> scenes;
 };
 
 struct an8_file_block
@@ -821,6 +921,56 @@ void getPoints3f(vector<an8_point3f>* points, an8_file_block* block)
             p.x = v[0];
             p.y = v[1];
             p.z = v[2];
+            points->push_back(p);
+        }
+        else if(c.compare(" ")==0 && in_scope)
+        {
+            v[vi] = atof(arg.c_str());
+            arg = "";
+            vi++;
+        }
+        else
+            arg += c;
+    }
+
+}
+
+void getPoints4f(vector<an8_point4f>* points, an8_file_block* block)
+{
+    double v[4];
+    int vi = 0;
+    string arg = "";
+
+    bool in_scope = false;
+
+    for(int i = 0; i < block->value.length(); i++)
+    {
+        string c = block->value.substr(i,1);
+
+        if(c.compare("(")==0)
+        {
+            in_scope = true;
+            arg = "";
+            vi = 0;
+            v[0] = 0;
+            v[1] = 0;
+            v[2] = 0;
+            v[3] = 0;
+        }
+        else if(c.compare(")")==0)
+        {
+            in_scope = false;
+
+            if(vi < 4)
+            {
+                v[3] = atof(arg.c_str());
+            }
+
+            an8_point4f p;
+            p.x = v[0];
+            p.y = v[1];
+            p.z = v[2];
+            p.w = v[3];
             points->push_back(p);
         }
         else if(c.compare(" ")==0 && in_scope)
@@ -1484,7 +1634,7 @@ void getFigure(an8_project* project, an8_file_block* block)
         if(c_block->name.compare("figure")==0)
         {
             #ifdef AN8_DEBUG
-            cout << "figure_name = " << c_block->obj_name << endl;
+            //cout << "figure_name = " << c_block->obj_name << endl;
             #endif // AN8_DEBUG
 
             an8_figure figure;
@@ -1519,7 +1669,7 @@ void getFloatKey(an8_floatkey* key, an8_file_block* block)
 
     an8_file_block* c_block;
 
-    string value = trim(block->value);
+    string value = trim(block->value) + " ";
 
     int key_index = 0;
 
@@ -1557,6 +1707,140 @@ void getFloatKey(an8_floatkey* key, an8_file_block* block)
 
 }
 
+void getPointKey(an8_pointkey* key, an8_file_block* block)
+{
+
+    an8_file_block* c_block;
+
+    string value = trim(block->value) + " ";
+
+    int key_index = 0;
+
+    string c_arg = "";
+
+    int m_start = block->value3.find_first_of("\"") + 1;
+    int m_end = block->value3.substr(m_start).find_first_of("\"")+1;
+
+    if(m_start != string::npos && m_end != string::npos)
+        key->mod_string = block->value3.substr(m_start, m_end-m_start);
+    else
+        key->mod_string = "";
+
+    vector<an8_point3f> points;
+    getPoints3f(&points, block);
+
+    if(points.size() >= 3)
+    {
+        key->value = points[0];
+        key->forward_vector = points[1];
+        key->reverse_vector = points[2];
+    }
+
+
+    for(int i = 0; i < value.length(); i++)
+    {
+        string c = value.substr(i,1);
+
+        if(c.compare(" ")==0)
+        {
+            key->frame_index = atoi(c_arg.c_str());
+            break;
+        }
+        else
+            c_arg += c;
+    }
+
+}
+
+void getQKey(an8_qkey* key, an8_file_block* block)
+{
+
+    an8_file_block* c_block;
+
+    string value = trim(block->value) + " ";
+
+    int key_index = 0;
+
+    string c_arg = "";
+
+    int m_start = block->value3.find_first_of("\"") + 1;
+    int m_end = block->value3.substr(m_start).find_first_of("\"")+1;
+
+    if(m_start != string::npos && m_end != string::npos)
+        key->mod_string = block->value3.substr(m_start, m_end-m_start);
+    else
+        key->mod_string = "";
+
+    vector<an8_point4f> points;
+    getPoints4f(&points, block);
+
+    if(points.size() >= 1)
+    {
+        key->value = points[0];
+    }
+
+
+    for(int i = 0; i < value.length(); i++)
+    {
+        string c = value.substr(i,1);
+
+        if(c.compare(" ")==0)
+        {
+            key->frame_index = atoi(c_arg.c_str());
+            break;
+        }
+        else
+            c_arg += c;
+    }
+
+}
+
+void getBooleanKey(an8_booleankey* key, an8_file_block* block)
+{
+
+    an8_file_block* c_block;
+
+
+    string value = trim(block->value) + " ";
+    //cout << "DBG BOOLEAN: " << value << endl;
+
+    int key_index = 0;
+
+    string c_arg = "";
+
+    int m_start = block->value3.find_first_of("\"") + 1;
+    int m_end = block->value3.substr(m_start).find_first_of("\"")+1;
+
+    if(m_start != string::npos && m_end != string::npos)
+        key->mod_string = block->value3.substr(m_start, m_end-m_start);
+    else
+        key->mod_string = "";
+
+    for(int i = 0; i < value.length(); i++)
+    {
+        string c = value.substr(i,1);
+
+        if(c.compare(" ")==0)
+        {
+            switch(key_index)
+            {
+                case 0:
+                    key->frame_index = atoi(c_arg.c_str());
+                    break;
+                case 1:
+                    //cout << "debug bool = " << c_arg << endl;
+                    key->value = atoi(c_arg.c_str()) == 0 ? false : true;
+                    break;
+            }
+            c_arg = "";
+            key_index++;
+        }
+        else
+            c_arg += c;
+    }
+
+}
+
 void getTrack(an8_track* track, an8_file_block* block)
 {
     if(block->block.size() == 0)
@@ -1570,14 +1854,59 @@ void getTrack(an8_track* track, an8_file_block* block)
 
         if(c_block->name.compare("floatkey")==0)
         {
+            //cout << "FLOAT_KEY" << endl;
             an8_floatkey key;
             getFloatKey(&key, c_block);
-            cout << "key frame = " << key.frame_index << endl;
-            cout << "key value = " << key.value << endl;
-            cout << "key mod = " << key.mod_string << endl;
+            //cout << "key frame = " << key.frame_index << endl;
+            //cout << "key value = " << key.value << endl;
+            //cout << "key mod = " << key.mod_string << endl;
 
             track->track_type = TRACK_TYPE_FLOAT;
             track->floatkey.push_back(key);
+            //cout << "Float Key = " << c_block->value << endl;
+            //named_object->name_block.name = c_block->obj_name;
+        }
+        else if(c_block->name.compare("pointkey")==0)
+        {
+            //cout << "POINT_KEY" << endl;
+            an8_pointkey key;
+            getPointKey(&key, c_block);
+            //cout << "key frame = " << key.frame_index << endl;
+            //cout << "key value = " << key.value.x << ", " << key.value.y << ", " << key.value.z << endl;
+            //cout << "key forward = " << key.forward_vector.x << ", " << key.forward_vector.y << ", " << key.forward_vector.z << endl;
+            //cout << "key reverse = " << key.reverse_vector.x << ", " << key.reverse_vector.y << ", " << key.reverse_vector.z << endl;
+            //cout << "key mod = " << key.mod_string << endl;
+
+            track->track_type = TRACK_TYPE_POINT;
+            track->pointkey.push_back(key);
+            //cout << "Float Key = " << c_block->value << endl;
+            //named_object->name_block.name = c_block->obj_name;
+        }
+        else if(c_block->name.compare("qkey")==0)
+        {
+            //cout << "Q_KEY" << endl;
+            an8_qkey key;
+            getQKey(&key, c_block);
+            //cout << "key frame = " << key.frame_index << endl;
+            //cout << "key value = " << key.value.x << ", " << key.value.y << ", " << key.value.z << endl;
+            //cout << "key mod = " << key.mod_string << endl;
+
+            track->track_type = TRACK_TYPE_QUATERNION;
+            track->qkey.push_back(key);
+            //cout << "Float Key = " << c_block->value << endl;
+            //named_object->name_block.name = c_block->obj_name;
+        }
+        else if(c_block->name.compare("booleankey")==0)
+        {
+            //cout << "BOOLEAN_KEY" << endl;
+            an8_booleankey key;
+            getBooleanKey(&key, c_block);
+            //cout << "key frame = " << key.frame_index << endl;
+            //cout << "key value = " << (key.value ? "true" : "false") << endl;
+            //cout << "key mod = " << key.mod_string << endl;
+
+            track->track_type = TRACK_TYPE_BOOLEAN;
+            track->booleankey.push_back(key);
             //cout << "Float Key = " << c_block->value << endl;
             //named_object->name_block.name = c_block->obj_name;
         }
@@ -1603,9 +1932,9 @@ void getJointAngle(an8_jointangle* jointangle, an8_file_block* block)
     jointangle->bone_name = ja_val3.substr(bn_start, bn_end-bn_start);
     jointangle->axis = ja_val3.substr(axis_start, axis_end-axis_start);
 
-    cout << "VAL3 = " << ja_val3 << endl;
-    cout << "bone name =[" << jointangle->bone_name << "]" << endl;
-    cout << "axis =[" << jointangle->axis << "]" << endl;
+    //cout << "VAL3 = " << ja_val3 << endl;
+    //cout << "bone name =[" << jointangle->bone_name << "]" << endl;
+    //cout << "axis =[" << jointangle->axis << "]" << endl;
 
 
     for(int i = 0; i < block->block.size(); i++)
@@ -1614,7 +1943,7 @@ void getJointAngle(an8_jointangle* jointangle, an8_file_block* block)
 
         if(c_block->name.compare("track")==0)
         {
-            cout << "GET TRACK" << endl;
+            //cout << "GET TRACK" << endl;
             getTrack(&jointangle->track, c_block);
 
             //named_object->name_block.name = c_block->obj_name;
@@ -1638,24 +1967,24 @@ void getSequence(an8_project* project, an8_file_block* block)
             sequence.name = c_block->obj_name;
 
             #ifdef AN8_DEBUG
-            cout << "sequence_name = " << sequence.name << endl;
+            //cout << "sequence_name = " << sequence.name << endl;
             #endif // AN8_DEBUG
 
             an8_file_block* c2_block;
 
-            for(int i = 0; i < c_block->block.size(); i++)
+            for(int n = 0; n < c_block->block.size(); n++)
             {
-                c2_block = &c_block->block[i];
+                c2_block = &c_block->block[n];
                 if(c2_block->name.compare("figure")==0)
                 {
                     sequence.figure_name = c2_block->obj_name;
-                    cout << "figure_name = " << sequence.figure_name << endl;
+                    //cout << "figure_name = " << sequence.figure_name << endl;
 
                 }
                 else if(c2_block->name.compare("frames")==0)
                 {
                     sequence.num_frames = atoi(c2_block->value.c_str());
-                    cout << "frame_count = " << sequence.num_frames << endl;
+                    //cout << "frame_count = " << sequence.num_frames << endl;
 
                 }
                 else if(c2_block->name.compare("jointangle")==0)
@@ -1672,11 +2001,415 @@ void getSequence(an8_project* project, an8_file_block* block)
                 }
                 else
                 {
-                    cout << "data obj (" << c2_block->name << ")" << endl;
+                    //cout << "data obj (" << c2_block->name << ")" << endl;
                 }
             }
 
             project->sequences.push_back(sequence);
+
+        }
+
+    }
+
+}
+
+void getController(an8_controller* controller, an8_file_block* block)
+{
+    if(block->block.size() == 0)
+        return;
+
+    an8_file_block* c_block;
+
+    controller->name = block->obj_name;
+
+    //cout << "Controller Name: " << controller->name << endl;
+
+
+    for(int i = 0; i < block->block.size(); i++)
+    {
+        c_block = &block->block[i];
+
+        if(c_block->name.compare("track")==0)
+        {
+            //cout << "GET TRACK" << endl;
+            getTrack(&controller->track, c_block);
+
+            //named_object->name_block.name = c_block->obj_name;
+        }
+    }
+
+}
+
+void getNamedSequence(an8_namedsequence* namedsequence, an8_file_block* block)
+{
+
+    an8_file_block* c_block;
+
+
+    string value = trim(block->value) + " ";
+    int key_index = 0;
+
+    string c_arg = "";
+
+    namedsequence->name = block->obj_name;
+
+    //cout << "Named Sequence: " << namedsequence->name << endl;
+
+    for(int i = 0; i < value.length(); i++)
+    {
+        string c = value.substr(i,1);
+
+        if(c.compare(" ")==0)
+        {
+            namedsequence->frame_num = atoi(c_arg.c_str());
+            //cout << "NS Frame Num: " << namedsequence->frame_num << endl;
+
+            c_arg = "";
+            key_index++;
+        }
+        else
+            c_arg += c;
+    }
+
+}
+
+void getElement(an8_element* element, an8_file_block* block)
+{
+    if(block->block.size() == 0)
+        return;
+
+    an8_file_block* c_block;
+
+    string element_val3 = block->value3;
+
+    int name_start = element_val3.find_first_of("\"") + 1;
+    int name_end = element_val3.substr(name_start).find_first_of("\"")+1;
+
+    element->name = element_val3.substr(name_start, name_end-name_start);
+
+    if(block->name.compare("figureelement") == 0)
+        element->element_type = ELEMENT_TYPE_FIGURE;
+    else if(block->name.compare("objectelement") == 0)
+        element->element_type = ELEMENT_TYPE_OBJECT;
+    else if(block->name.compare("camera") == 0)
+        element->element_type = ELEMENT_TYPE_CAMERA;
+    else if(block->name.compare("light") == 0)
+        element->element_type = ELEMENT_TYPE_LIGHT;
+    else
+        element->element_type = ELEMENT_TYPE_NULL;
+
+    element->obj_name = "";
+    switch(element->element_type)
+    {
+        case ELEMENT_TYPE_FIGURE:
+        case ELEMENT_TYPE_OBJECT:
+            int obj_start = name_end + element_val3.substr(name_end+1).find_first_of("\"")+2;
+            int obj_end = obj_start + element_val3.substr(obj_start).find_first_of("\"");
+            element->obj_name = element_val3.substr(obj_start, obj_end-obj_start);
+            break;
+    }
+
+    element->bound_target = "";
+    element->cast_shadow = false;
+    element->fov = 0;
+    element->in_angle = 0;
+    element->in_radius = 0;
+    element->locked = false;
+    element->max_samples = 0;
+    element->min_samples = 0;
+    element->monte_carlo = false;
+    element->obj_name = "";
+    element->out_angle = 0;
+    element->out_radius = 0;
+    element->raytrace_shadow = false;
+    element->receive_shadow = false;
+    element->roll = false;
+    element->scale = 1;
+    element->soft_edges = false;
+    element->soft_size = 0;
+    element->visible = true;
+
+    //cout << "VAL3 = " << element_val3 << endl;
+    //cout << "element_name =[" << element->name << "]" << endl;
+    //cout << "element_obj_name =[" << element->obj_name << "]" << endl;
+    //cout << "element type = " << element->element_type << endl;
+
+
+    for(int i = 0; i < block->block.size(); i++)
+    {
+        c_block = &block->block[i];
+
+        if(c_block->name.compare("loc")==0)
+        {
+            vector<an8_point3f> points;
+            getPoints3f(&points, c_block);
+
+            if(points.size() > 0)
+                element->loc = points[0];
+            else
+                cout << "Error getting element location" << endl;
+
+            //cout << "GET Location: " << points[0].x << ", " << points[0].y << ", " << points[0].z << endl;
+        }
+        else if(c_block->name.compare("orientation")==0)
+        {
+            vector<an8_point4f> points;
+            getPoints4f(&points, c_block);
+
+            if(points.size() > 0)
+                element->orientation = points[0];
+            else
+                cout << "Error getting element orientation" << endl;
+
+            //cout << "GET Orientation: " << points[0].x << ", " << points[0].y << ", " << points[0].z << ", " << points[0].w << endl;
+
+        }
+        else if(c_block->name.compare("roll")==0)
+        {
+            element->roll = (atoi(c_block->value.c_str())==0) ? false : true;
+            //cout << "GET roll: " << (element->roll ? "true" : "false") << endl;
+        }
+        else if(c_block->name.compare("facespath")==0)
+        {
+            element->orient_relative_to = ORIENT_RELATIVE_TO_FACESPATH;
+            //cout << "GET relative orient: " << c_block->name << endl;
+        }
+        else if(c_block->name.compare("facestarget")==0)
+        {
+            element->orient_relative_to = ORIENT_RELATIVE_TO_FACESTARGET;
+            //cout << "GET relative orient: " << c_block->name << endl;
+        }
+        else if(c_block->name.compare("orienttarget")==0)
+        {
+            element->orient_relative_to = ORIENT_RELATIVE_TO_ORIENTTARGET;
+            //cout << "GET relative orient: " << c_block->name << endl;
+        }
+        else if(c_block->name.compare("boundtarget")==0)
+        {
+            element->bound_target = c_block->obj_name;
+            //cout << "GET Bound Target: " << element->bound_target << endl;
+        }
+        else if(c_block->name.compare("scale")==0)
+        {
+            element->scale = atof(c_block->value.c_str());
+            //cout << "GET scale: " << element->scale << endl;
+        }
+        else if(c_block->name.compare("locked")==0)
+        {
+            element->locked = atoi(c_block->value.c_str()) == 0 ? false : true;
+            //cout << "GET locked: " << element->locked << endl;
+        }
+        else if(c_block->name.compare("controller")==0)
+        {
+            an8_controller controller;
+            getController(&controller, c_block);
+            element->controller.push_back(controller);
+        }
+        else if(c_block->name.compare("camera")==0 ||
+                        c_block->name.compare("figureelement")==0 ||
+                        c_block->name.compare("objectelement")==0 ||
+                        c_block->name.compare("light")==0 ||
+                        c_block->name.compare("null")==0)
+        {
+            //cout << "GET CHILD" << endl;
+            an8_element child_element;
+            getElement(&child_element, c_block);
+            element->element.push_back(child_element);
+        }
+        else if(c_block->name.compare("namedsequence")==0)
+        {
+            an8_namedsequence namedsequence;
+            getNamedSequence(&namedsequence, c_block);
+            element->named_sequence.push_back(namedsequence);
+        }
+        else if(c_block->name.compare("fov")==0)
+        {
+            element->fov = atof(c_block->value.c_str());
+            //cout << "FOV: " << element->fov << endl;
+        }
+        else if(c_block->name.compare("color")==0)
+        {
+            vector<an8_point3f> point;
+            getPoints3f(&point, c_block);
+            if(point.size() > 0)
+            {
+                element->color.r = (uint8_t)point[0].x;
+                element->color.g = (uint8_t)point[0].y;
+                element->color.b = (uint8_t)point[0].z;
+            }
+            //cout << "GET COLOR: " << (uint32_t)element->color.r << ", " << (uint32_t)element->color.g << ", " << (uint32_t)element->color.b << endl;
+        }
+        else if(c_block->name.compare("infinite")==0)
+        {
+            element->light_type = LIGHT_TYPE_INFINITE;
+        }
+        else if(c_block->name.compare("local")==0)
+        {
+            element->light_type = LIGHT_TYPE_LOCAL;
+        }
+        else if(c_block->name.compare("spotlight")==0)
+        {
+            element->light_type = LIGHT_TYPE_SPOT;
+        }
+        else if(c_block->name.compare("inradius")==0)
+        {
+            element->in_radius = atof(c_block->value.c_str());
+        }
+        else if(c_block->name.compare("outradius")==0)
+        {
+            element->out_radius = atof(c_block->value.c_str());
+        }
+        else if(c_block->name.compare("inangle")==0)
+        {
+            element->in_angle = atof(c_block->value.c_str());
+        }
+        else if(c_block->name.compare("outangle")==0)
+        {
+            element->out_angle = atof(c_block->value.c_str());
+        }
+        else if(c_block->name.compare("castshadow")==0)
+        {
+            element->cast_shadow = true;
+        }
+        else if(c_block->name.compare("raytraceshadow")==0)
+        {
+            element->raytrace_shadow = true;
+        }
+        else if(c_block->name.compare("soft")==0)
+        {
+            element->soft_edges = true;
+        }
+        else if(c_block->name.compare("softsize")==0)
+        {
+            element->soft_size = atof(c_block->value.c_str());
+        }
+        else if(c_block->name.compare("minsamples")==0)
+        {
+            element->min_samples = atoi(c_block->value.c_str());
+        }
+        else if(c_block->name.compare("maxsamples")==0)
+        {
+            element->max_samples = atoi(c_block->value.c_str());
+        }
+        else if(c_block->name.compare("montecarlo")==0)
+        {
+            element->monte_carlo = true;
+        }
+        else if(c_block->name.compare("visibility")==0)
+        {
+            element->visible = atoi(c_block->value.c_str()) == 0 ? false : true;
+        }
+        else if(c_block->name.compare("castshadow")==0)
+        {
+            element->cast_shadow = true;
+        }
+        else if(c_block->name.compare("receiveshadow")==0)
+        {
+            element->receive_shadow = true;
+        }
+        else
+        {
+            //cout << "element obj(" << c_block->name << ")" << endl;
+        }
+    }
+
+}
+
+void getScene(an8_project* project, an8_file_block* block)
+{
+    if(block->block.size() == 0)
+        return;
+
+    an8_file_block* c_block;
+    for(int i = 0; i < block->block.size(); i++)
+    {
+        c_block = &block->block[i];
+        if(c_block->name.compare("scene")==0)
+        {
+            an8_scene scene;
+            scene.name = c_block->obj_name;
+
+            #ifdef AN8_DEBUG
+            //cout << "scene_name = " << scene.name << endl;
+            #endif // AN8_DEBUG
+
+            an8_file_block* c2_block;
+
+            for(int n = 0; n < c_block->block.size(); n++)
+            {
+                c2_block = &c_block->block[n];
+                if(c2_block->name.compare("frames")==0)
+                {
+                    scene.num_frames = atoi(c2_block->value.c_str());
+                    //cout << "frame_count = " << scene.num_frames << endl;
+
+                }
+                else if(c2_block->name.compare("groundgrid")==0)
+                {
+                    scene.groundgrid = (atoi(c2_block->value.c_str()) == 0) ? false : true;
+                    //cout << "groundgrid = " << (scene.groundgrid ? "true" : "false") << endl;
+                }
+                else if(c2_block->name.compare("shadowbias")==0)
+                {
+                    scene.shadowbias = atof(c2_block->value.c_str());
+                    //cout << "shadowbias = " << scene.shadowbias << endl;
+                }
+                else if(c2_block->name.compare("background")==0)
+                {
+                    int c_index = 0;
+                    string c_val = "";
+                    string block_value = c2_block->value + " ";
+                    for(int bkg_i = 0; bkg_i < block_value.length(); bkg_i++)
+                    {
+                        string c = block_value.substr(bkg_i, 1);
+                        if(c.compare(" ")==0)
+                        {
+                            switch(c_index)
+                            {
+                                case 0: scene.background.r = atoi(c_val.c_str()); break;
+                                case 1: scene.background.g = atoi(c_val.c_str()); break;
+                                case 2: scene.background.b = atoi(c_val.c_str()); break;
+                            }
+                            c_index++;
+                            c_val = "";
+                        }
+                        else
+                            c_val += c;
+                    }
+                    //cout << "bkg = " << (uint32_t)scene.background.r << ", " << (uint32_t)scene.background.g << ", " << (uint32_t)scene.background.b << endl;
+                }
+                else if(c2_block->name.compare("image")==0)
+                {
+                    scene.image.filename = str_replace(str_replace(c2_block->value3, "\"", ""), "\\\\", "\\");
+                    if(c2_block->block.size()>0)
+                    {
+                        if(c2_block->block[0].name.compare("panorama")==0)
+                        {
+                            scene.image.image_type = IMAGE_TYPE_PANORAMA;
+                            an8_file_block* panorama_block = & c2_block->block[0];
+                            // need to come back here eventually
+                        }
+                    }
+
+                    //cout << "image = " << scene.image.filename << endl;
+                }
+                else if(c2_block->name.compare("camera")==0 ||
+                        c2_block->name.compare("figureelement")==0 ||
+                        c2_block->name.compare("objectelement")==0 ||
+                        c2_block->name.compare("light")==0 ||
+                        c2_block->name.compare("null")==0)
+                {
+                    an8_element element;
+                    getElement(&element, c2_block);
+                    scene.elements.push_back(element);
+                }
+                else
+                {
+                    //cout << "data obj (" << c2_block->name << ")" << endl;
+                }
+            }
+
+            project->scenes.push_back(scene);
 
         }
 
@@ -1813,86 +2546,7 @@ an8_project loadAN8(std::string an8_project_file)
     getObject(&project, &block);
     getFigure(&project, &block);
     getSequence(&project, &block);
-    return project;
-
-    cout <<"Num Objects = " << project.objects.size() << endl << endl;
-
-    for(int i = 0; i < project.objects.size(); i++)
-    {
-        cout << project.objects[i].name << endl;
-
-        for(int m = 0; m < project.objects[i].material.size(); m++)
-        {
-            cout << "diffuse = ";
-            cout << (int)project.objects[i].material[m].surface.diffuse.color.r << ", " <<
-                    (int)project.objects[i].material[m].surface.diffuse.color.g << ", " <<
-                    (int)project.objects[i].material[m].surface.diffuse.color.b << endl;
-
-            cout << "specular = ";
-            cout << (int)project.objects[i].material[m].surface.specular.color.r << ", " <<
-                    (int)project.objects[i].material[m].surface.specular.color.g << ", " <<
-                    (int)project.objects[i].material[m].surface.specular.color.b << endl;
-
-            for(int s_map = 0; s_map < project.objects[i].material[m].surface.surface_map.size(); s_map++)
-            {
-                cout << "map[" << s_map << "]" << endl;
-                cout << "    kind = " << project.objects[i].material[m].surface.surface_map[s_map].kind << endl;
-                cout << "    tx_name = " << project.objects[i].material[m].surface.surface_map[s_map].texturename << endl;
-                cout << "    blend mode = " << (int)project.objects[i].material[m].surface.surface_map[s_map].textureparams.blend_mode << endl;
-                cout << "    alpha mode = " << (int)project.objects[i].material[m].surface.surface_map[s_map].textureparams.alpha_mode << endl;
-            }
-        }
-
-        for(int cmp_index = 0; cmp_index < project.objects[i].component.size(); cmp_index++)
-        {
-            an8_component cmpt = project.objects[i].component[cmp_index];
-
-            switch(cmpt.type)
-            {
-                case AN8_COMPONENT_TYPE_MESH:
-                    cout << "Mesh data[" << cmp_index << "]: " << cmpt.mesh.name << endl;
-                    cout << "    base.origin = " << cmpt.mesh.base.origin.x << ", "
-                                                 << cmpt.mesh.base.origin.y << ", "
-                                                 << cmpt.mesh.base.origin.z << endl;
-
-                    cout << "    base.orientation = " << cmpt.mesh.base.orientation.x << ", "
-                                                      << cmpt.mesh.base.orientation.y << ", "
-                                                      << cmpt.mesh.base.orientation.z << ", "
-                                                      << cmpt.mesh.base.orientation.w << endl;
-
-                    an8_mesh mesh = cmpt.mesh;
-
-                    for(int mesh_a = 0; mesh_a < mesh.materialname.size(); mesh_a++)
-                    {
-                        cout << "    material_name = " << mesh.materialname[mesh_a] << endl;
-                    }
-
-                    cout << "EDGE DBG" << endl;
-
-                    if(mesh.edges.size() > 0)
-                        cout << mesh.edges[1].point_index1 << ", "
-                             << mesh.edges[1].point_index2 << ", "
-                             << mesh.edges[1].sharpness << endl;
-
-                    cout << "EDGE DBG END" << endl;
-
-                    cout << "NORMAL DBG" << endl;
-
-                    if(mesh.edges.size() > 0)
-                        cout << mesh.normals[1].x << ", "
-                             << mesh.normals[1].y << ", "
-                             << mesh.normals[1].z << endl;
-
-                    cout << "NORMAL DBG END" << endl;
-
-
-                    break;
-            }
-        }
-
-        cout << endl;
-    }
-
+    getScene(&project, &block);
     return project;
 
 }
