@@ -11,6 +11,9 @@
 
 using namespace std;
 
+namespace an8
+{
+
 string ltrim(string l_string)
 {
     if(l_string.find_first_not_of(" ") != string::npos)
@@ -235,6 +238,23 @@ struct an8_weightedBy
     string bone_name;
 };
 
+struct an8_boneWeight
+{
+    uint32_t bone_index; //This is the index in the weightedBy vector in namedobject
+    double weight; //normalized
+};
+
+struct an8_vertexWeight
+{
+    vector<an8_boneWeight> boneWeight;
+};
+
+struct an8_meshWeights
+{
+    string name;
+    vector<an8_vertexWeight> vertexWeight;
+};
+
 struct an8_namedobject
 {
     string name;
@@ -243,6 +263,7 @@ struct an8_namedobject
     an8_base pivot;
     an8_material material;
     vector<an8_weightedBy> weightedBy;
+    vector<an8_meshWeights> meshWeights;
 };
 
 #define AN8_COMPONENT_TYPE_MESH         0
@@ -1303,6 +1324,94 @@ void getMesh(an8_mesh* mesh, an8_file_block* block)
 
 }
 
+void getWeights(an8_meshWeights* meshWeight, an8_file_block* block)
+{
+    string value = block->value;
+    meshWeight->name = block->obj_name;
+
+    //cout << "Name: " << meshWeight->name << endl;
+    //cout << "GET Weights: " << value << endl << endl;
+
+    int p_scope = 0;
+    string vertex_value = "";
+
+    for(int i = 0; i < value.length(); i++)
+    {
+        string c = value.substr(i,1);
+
+        if(c.compare("(")==0)
+        {
+            p_scope++;
+        }
+        else if(c.compare(")")==0)
+        {
+            p_scope--;
+        }
+        else if(p_scope > 0)
+        {
+            vertex_value += c;
+        }
+
+        if(p_scope==0 && vertex_value.length() > 0)
+        {
+            vertex_value = str_replace(vertex_value, "(", " ");
+            vertex_value = str_replace(vertex_value, ")", " ");
+            vertex_value += " ";
+
+            int numVertices = 0;
+            an8_boneWeight bone_weight;
+            an8_vertexWeight vert_weight;
+
+            int arg_num = 0;
+            string arg = "";
+
+            for(int n = 0; n < vertex_value.length(); n++)
+            {
+                c = vertex_value.substr(n, 1);
+
+                if(c.compare(" ") == 0)
+                {
+                    if(arg.length()==0)
+                        continue;
+
+                    if(arg_num==0)
+                        numVertices = atoi(arg.c_str());
+                    else if( (arg_num % 2) > 0)
+                        bone_weight.bone_index = atoi(arg.c_str());
+                    else
+                    {
+                        bone_weight.weight = atof(arg.c_str());
+                        vert_weight.boneWeight.push_back(bone_weight);
+                    }
+
+                    arg = "";
+                    arg_num++;
+                }
+                else
+                    arg += c;
+
+            }
+
+            int n_index = meshWeight->vertexWeight.size();
+            meshWeight->vertexWeight.push_back(vert_weight);
+
+            /*
+            if(meshWeight->name.compare("mesh01x")==0)
+            {
+                cout << "---------Vertex: " << n_index << " --> " << vertex_value << endl << endl;
+                for(int n = 0; n < meshWeight->vertexWeight[n_index].boneWeight.size(); n++)
+                {
+                    cout << "bone: " << meshWeight->vertexWeight[n_index].boneWeight[n].bone_index << endl;
+                    cout << "weight: " << meshWeight->vertexWeight[n_index].boneWeight[n].weight << endl << endl;
+                }
+            }
+            */
+            vertex_value = "";
+        }
+    }
+
+}
+
 void getNamedObject(an8_namedobject* named_object, an8_file_block* block)
 {
     if(block->block.size() == 0)
@@ -1362,6 +1471,11 @@ void getNamedObject(an8_namedobject* named_object, an8_file_block* block)
             an8_weightedBy wb;
             wb.bone_name = c_block->obj_name;
             named_object->weightedBy.push_back(wb);
+        }
+        else if(c_block->name.compare("weights")==0)
+        {
+            an8_meshWeights weights;
+            getWeights(&weights, c_block);
         }
     }
 
@@ -2551,4 +2665,5 @@ an8_project loadAN8(std::string an8_project_file)
 
 }
 
+}
 #endif // IRRAN8_H_INCLUDED
