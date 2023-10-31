@@ -1,0 +1,10 @@
+# Created with Anim8or 1.00
+# Object "tw1":
+
+newmtl ___default___
+Ka 0.875 0.875 0.875
+Kd 0.875 0.875 0.875
+Ks 1 1 1
+Ns 1.0
+map_Kd tw1_texture.bmp
+

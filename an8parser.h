@@ -190,7 +190,8 @@ struct an8_edge
 struct an8_pointdata
 {
     int32_t point_index;
-    int32_t mt_index; // index in normals or texcoords depending on value of flags
+    int32_t normal_index; // index in normals
+    int32_t texture_index; // texture index
 };
 
 #define AN8_FACE_SF_SHOW_BACK   1
@@ -226,6 +227,9 @@ struct an8_mesh
     vector<an8_edge> edges; //mostly unused
     vector<an8_uv> texcoords;
     vector<an8_facedata> faces;
+
+    //irrlicht loader specific crap
+    void* meshBuffer;
 };
 
 struct an8_name
@@ -264,6 +268,9 @@ struct an8_namedobject
     an8_material material;
     vector<an8_weightedBy> weightedBy;
     vector<an8_meshWeights> meshWeights;
+
+    //irrlicht loader specific stuff
+    vector<int> meshList_index;
 };
 
 #define AN8_COMPONENT_TYPE_MESH         0
@@ -511,6 +518,13 @@ struct an8_scene
 };
 
 
+struct an8_irr_joint_data
+{
+    vector<an8_namedobject> namedobject;
+    an8_bone bone;
+    void* joint;
+};
+
 struct an8_project
 {
     an8_header header;
@@ -523,6 +537,10 @@ struct an8_project
     vector<an8_figure> figures;
     vector<an8_sequence> sequences;
     vector<an8_scene> scenes;
+
+    //The following are not part of anim8or structs but just used for storing temp data when loading irrlicht mesh
+    vector<an8_irr_joint_data> irr_joint_data;
+    an8::an8_figure node_figure; // I am going to store the figure the current bones are from here
 };
 
 struct an8_file_block
@@ -1161,6 +1179,11 @@ void getFaces(vector<an8_facedata>* faces, an8_file_block* block)
     bool in_pdata = false;
     bool in_scope = false;
 
+    bool normal_flag = false;
+    bool texture_flag = false;
+
+    bool flag_set = false;
+
     for(int i = 0; i < block->value.length(); i++)
     {
         string c = block->value.substr(i,1);
@@ -1174,6 +1197,7 @@ void getFaces(vector<an8_facedata>* faces, an8_file_block* block)
                 vi = 0;
                 v[0] = 0;
                 v[1] = 0;
+                v[2] = 0;
             }
             else
                 in_pdata = true;
@@ -1184,14 +1208,48 @@ void getFaces(vector<an8_facedata>* faces, an8_file_block* block)
             {
                 in_scope = false;
 
-                if(vi < 2)
+                //f_data[1] (flag bitmask) should have been set by now
+                if(!flag_set)
                 {
-                    v[1] = atoi(arg.c_str());
+                    normal_flag = (f_data[1] >> 1);
+                    texture_flag = (f_data[1] >> 2);
+                    flag_set = true;
                 }
 
                 an8_pointdata p;
+
+                if(i > 0)
+                {
+                    if(block->value.substr(i-1,1).compare(" ")!=0) //if the last character was not space then we need to read the last arg
+                    {
+                        v[vi] = atoi(arg.c_str());
+                        vi++;
+                    }
+
+                }
+
+                //an8_pointdata p;
                 p.point_index = v[0];
-                p.mt_index = v[1];
+
+                if(vi < 3)
+                {
+                    if(normal_flag)
+                    {
+                        p.normal_index = v[1];
+                        p.texture_index = -1;
+                    }
+                    else
+                    {
+                        p.texture_index = v[1];
+                        p.normal_index = -1;
+                    }
+                }
+                else
+                {
+                    p.normal_index = v[1];
+                    p.texture_index = v[2];
+                }
+
                 point_data.push_back(p);
             }
             else
@@ -2220,6 +2278,8 @@ void getElement(an8_element* element, an8_file_block* block)
             int obj_start = name_end + element_val3.substr(name_end+1).find_first_of("\"")+2;
             int obj_end = obj_start + element_val3.substr(obj_start).find_first_of("\"");
             element->obj_name = element_val3.substr(obj_start, obj_end-obj_start);
+
+            //cout << "DEBUG: " << element->name << ", " << element->obj_name << endl;
             break;
     }
 
@@ -2232,7 +2292,6 @@ void getElement(an8_element* element, an8_file_block* block)
     element->max_samples = 0;
     element->min_samples = 0;
     element->monte_carlo = false;
-    element->obj_name = "";
     element->out_angle = 0;
     element->out_radius = 0;
     element->raytrace_shadow = false;
@@ -2426,6 +2485,8 @@ void getElement(an8_element* element, an8_file_block* block)
             //cout << "element obj(" << c_block->name << ")" << endl;
         }
     }
+
+    //cout << "DEBUG2: " << element->name << ", " << element->obj_name << endl;
 
 }
 
