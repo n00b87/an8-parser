@@ -6,6 +6,7 @@
 #include <vector>
 #include <stack>
 #include <string>
+#include <irrlicht/irrlicht.h>
 
 //#define AN8_DEBUG 1
 
@@ -271,6 +272,10 @@ struct an8_namedobject
 
     //irrlicht loader specific stuff
     vector<int> meshList_index;
+
+    // Note: Each named object will only have one object but
+    //       an object can have multiple meshes
+    vector<irr::scene::SSkinMeshBuffer*> meshBufferList;
 };
 
 #define AN8_COMPONENT_TYPE_MESH         0
@@ -522,7 +527,9 @@ struct an8_irr_joint_data
 {
     vector<an8_namedobject> namedobject;
     an8_bone bone;
-    void* joint;
+    irr::scene::ISkinnedMesh::SJoint *joint;
+    //vector<irr::u32> meshBufferIndex; //This is a list of meshes weighted by this bone
+    //void* parent_joint;
 };
 
 struct an8_project
