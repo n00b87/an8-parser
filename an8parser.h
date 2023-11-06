@@ -276,6 +276,7 @@ struct an8_namedobject
     // Note: Each named object will only have one object but
     //       an object can have multiple meshes
     vector<irr::scene::SSkinMeshBuffer*> meshBufferList;
+    std::string base_bone; //base transformations will happen from this bone
 };
 
 #define AN8_COMPONENT_TYPE_MESH         0
@@ -528,8 +529,11 @@ struct an8_irr_joint_data
     vector<an8_namedobject> namedobject;
     an8_bone bone;
     irr::scene::ISkinnedMesh::SJoint *joint;
+
+    //irrlicht specific stuff
+    int32_t namedobject_index; //index of named object used during an8_calculate_weight()
     //vector<irr::u32> meshBufferIndex; //This is a list of meshes weighted by this bone
-    //void* parent_joint;
+    irr::scene::ISkinnedMesh::SJoint *parent_joint;
 };
 
 struct an8_project
