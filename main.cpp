@@ -1194,8 +1194,8 @@ int main()
 	video::SMaterial material;
 
 
-	//an8::an8_project p = an8::loadAN8("/home/n00b/Projects/an8_irrlicht/assets/test3.an8");
-	an8::an8_project p = an8::loadAN8("/home/n00b/Projects/an8_irrlicht/assets/knight_f4.an8");
+	//an8::an8_project p = an8::loadAN8("assets/test3.an8");
+	an8::an8_project p = an8::loadAN8("assets/knight_f4.an8");
 
 	std::cout << "test load: " << p.scenes.size() << std::endl;
 	//device->drop();
