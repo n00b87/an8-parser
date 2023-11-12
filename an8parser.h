@@ -348,6 +348,10 @@ struct an8_bone
     an8_influence influence;
     std::vector<an8_component> component;
     std::vector<an8_bone> bone;
+
+    //irrlicht stuff
+    irr::core::vector3df pos;
+    irr::core::quaternion rot;
 };
 
 struct an8_figure
