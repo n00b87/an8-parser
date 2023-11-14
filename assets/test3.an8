@@ -135,7 +135,7 @@ sequence { "sequence01"
   
 }
 scene { "scene01"
-  frames { 72 }
+  frames { 71 }
   groundgrid { 1 }
   shadowbias { 0.00100 }
   background { 153 153 153 }
@@ -154,7 +154,6 @@ scene { "scene01"
         floatkey { 0 0 0 0 "S" }
         floatkey { 17 0 0 0 "S" }
         floatkey { 34 0 0 0 "S" }
-        floatkey { 51 0 0 0 "S" }
       }
     }
     controller { "joint.bone01-Y"
@@ -162,7 +161,6 @@ scene { "scene01"
         floatkey { 0 0 0 0 "S" }
         floatkey { 17 0 0 0 "S" }
         floatkey { 34 0 0 0 "S" }
-        floatkey { 51 0 0 0 "S" }
       }
     }
     controller { "joint.bone01-Z"
@@ -170,7 +168,6 @@ scene { "scene01"
         floatkey { 0 0 29.657 -29.657 "S" }
         floatkey { 17 88.972 -0.07235 0.07235 "S" }
         floatkey { 34 -0.43410 -29.689 29.689 "S" }
-        floatkey { 51 -89.16 -29.575 29.575 "S" }
       }
     }
     controller { "joint.bone02-X"
@@ -178,7 +175,6 @@ scene { "scene01"
         floatkey { 0 0 0 0 "S" }
         floatkey { 17 0 0 0 "S" }
         floatkey { 34 0 0 0 "S" }
-        floatkey { 51 0 0 0 "S" }
       }
     }
     controller { "joint.bone02-Y"
@@ -186,7 +182,6 @@ scene { "scene01"
         floatkey { 0 0 0 0 "S" }
         floatkey { 17 0 0 0 "S" }
         floatkey { 34 0 0 0 "S" }
-        floatkey { 51 0 0 0 "S" }
       }
     }
     controller { "joint.bone02-Z"
@@ -194,7 +189,6 @@ scene { "scene01"
         floatkey { 0 0 -26.784 26.784 "S" }
         floatkey { 17 -80.351 0.01857 -0.01857 "S" }
         floatkey { 34 0.11141 28.077 -28.077 "S" }
-        floatkey { 51 88.111 29.333 -29.333 "S" }
       }
     }
   }
