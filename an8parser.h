@@ -538,6 +538,7 @@ struct an8_irr_joint_data
     int32_t namedobject_index; //index of named object used during an8_calculate_weight()
     //vector<irr::u32> meshBufferIndex; //This is a list of meshes weighted by this bone
     irr::scene::ISkinnedMesh::SJoint *parent_joint;
+    double parent_length;
 };
 
 struct an8_project

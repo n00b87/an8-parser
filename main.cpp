@@ -129,9 +129,9 @@ irr::f32 an8_calculate_figure_transform(video::S3DVertex* vertex, an8::an8_irr_j
 
     //previous node position is px, py, pz
 	//px = parent_x : py = parent_y : pz = parent_z
-	scene::ISkinnedMesh::SJoint* pjoint = (scene::ISkinnedMesh::SJoint*)joint_data.joint;
+	scene::ISkinnedMesh::SJoint* pjoint = joint_data.joint;
 
-	if(!pjoint)
+	if( (!pjoint) || (!joint_data.parent_joint) )
     {
         std::cout << "NO PJOINT" << std::endl;
         return 0;
@@ -214,12 +214,13 @@ irr::f32 an8_calculate_figure_transform(video::S3DVertex* vertex, an8::an8_irr_j
 	//namedobject_matrix.transformVect(v_out);
 	jm.transformVect(v_out);
 
-	v_out = v_out - joint_data.joint->LocalMatrix.getTranslation();
+	core::vector3df parent_translate_vector(0, joint_data.parent_length, 0);
+	v_out = v_out - parent_translate_vector;
 
 	if(debug_vertex_count == 11)
 	std::cout << "Local Matrix = " << v_out.X << ", "
                                    << v_out.Y << ", "
-                                   << v_out.Z << "  ----  " << joint_data.joint->LocalMatrix.getTranslation().Y
+                                   << v_out.Z << "  ----  " << parent_translate_vector.Y
                                    << std::endl << std::endl;
 
 
@@ -486,23 +487,14 @@ int an8_addKeys(an8::an8_project* p, scene::ISkinnedMesh* AnimatedMesh, int scen
                 if(c_axis.compare("X")==0)
                 {
                     rkey->rotation.fromAngleAxis( core::degToRad(a_fkey.value), core::vector3df(1,0,0) );
-
-                    key.axis = "X";
-                    key.angle = a_fkey.value;
                 }
                 else if(c_axis.compare("Y")==0)
                 {
                     rkey->rotation.fromAngleAxis( core::degToRad(a_fkey.value), core::vector3df(0,1,0) );
-
-                    key.axis = "Y";
-                    key.angle = a_fkey.value;
                 }
                 else if(c_axis.compare("Z")==0)
                 {
                     rkey->rotation.fromAngleAxis( -1*core::degToRad(a_fkey.value), core::vector3df(0,0,1));
-
-                    key.axis = "Z";
-                    key.angle = a_fkey.value;
                 }
 
 
@@ -511,12 +503,6 @@ int an8_addKeys(an8::an8_project* p, scene::ISkinnedMesh* AnimatedMesh, int scen
                                                                                                    << m.getRotationDegrees().Y << ", "
                                                                                                    << m.getRotationDegrees().Z << ", "
                                                                                                    << std::endl;
-            }
-
-            if(joint_data->bone.name.compare("bone02")==0 && c_axis.compare("Z")==0)
-            {
-                //std::cout << "\nstopping at BONE 2" << std::endl << std::endl;
-                //break;
             }
 
         }
@@ -731,7 +717,7 @@ core::vector3df vectorRadiansToDegrees(core::vector3df r)
     return core::vector3df( core::radToDeg(r.X), core::radToDeg(r.Y), core::radToDeg(r.Z) );
 }
 
-core::matrix4 calculate_bone_matrix(scene::ISkinnedMesh::SJoint* inJoint, an8::an8_bone* bone, an8::an8_bone* parent)
+core::matrix4 calculate_bone_matrix(scene::ISkinnedMesh::SJoint* inJoint, an8::an8_bone* bone, an8::an8_bone* parent, bool should_translate=true)
 {
     //bone 4
     core::vector3df tvec( 0, parent->length, 0);
@@ -760,7 +746,8 @@ core::matrix4 calculate_bone_matrix(scene::ISkinnedMesh::SJoint* inJoint, an8::a
     core::matrix4 tm;
     tm.setTranslation(old_pos);
 
-    m = tm * m;
+    if(should_translate)
+        m = tm * m;
     //m.setTranslation(old_pos);
     //m.transformVect(t);
     //t += old_pos;
@@ -846,10 +833,14 @@ bool getAN8BoneNode(an8::an8_project* p, scene::ISkinnedMesh* AnimatedMesh, scen
 
 	bone.rot = core::quaternion(0,0,0,0);
 
+	core::matrix4 tm;
+
 	if(inJoint)
     {
-        joint->GlobalMatrix = calculate_bone_matrix(inJoint, &bone, &parent_bone);
+        joint->GlobalMatrix = calculate_bone_matrix(inJoint, &bone, &parent_bone, true);
         position.Y = parent_bone.length;
+
+        tm = calculate_bone_matrix(inJoint, &bone, &parent_bone, false);
     }
 
     core::quaternion orient = core::quaternion(-bone.orientation.x,
@@ -874,9 +865,14 @@ bool getAN8BoneNode(an8::an8_project* p, scene::ISkinnedMesh* AnimatedMesh, scen
 	bone.pos = position;
 	bone.pos.Z = -bone.pos.Z;
 
+	position = core::vector3df(0, parent_bone.length, 0);
+	tm.transformVect(position);
 
-    joint->Animatedrotation = bone.rot; //core::quaternion(0,0,0,-1);
-    joint->Animatedposition = bone.pos;// - parent_bone.pos;
+	std::cout << "\n PBN: " << (int)position.X << ", " << (int)position.Y << ", " << (int)position.Z << std::endl;
+
+
+    joint->Animatedrotation = core::quaternion(0,0,0,-1);
+    joint->Animatedposition = position;// - parent_bone.pos;
 
 
     //joint->LocalMatrix = calculate_bone_localMatrix(joint->GlobalMatrix, &bone, &parent_bone);
@@ -887,13 +883,11 @@ bool getAN8BoneNode(an8::an8_project* p, scene::ISkinnedMesh* AnimatedMesh, scen
     //Build LocalMatrix:
 
 	core::matrix4 positionMatrix;
-	positionMatrix.setTranslation( core::vector3df( 0, parent_bone.length, 0) );
-	//positionMatrix.setTranslation( bone.pos );
+	//positionMatrix.setTranslation( core::vector3df( 0, parent_bone.length, 0) );
+	positionMatrix.setTranslation( joint->Animatedposition );
 	//positionMatrix.setTranslation(core::vector3df(0,0,0));
 
 	core::matrix4 rotationMatrix;
-	irr::core::matrix4 matRotX, matRotY, matRotZ;
-
 	joint->Animatedrotation.getMatrix_transposed(rotationMatrix);
 	//rotationMatrix = joint->Animatedrotation.getMatrix();
 
@@ -901,6 +895,7 @@ bool getAN8BoneNode(an8::an8_project* p, scene::ISkinnedMesh* AnimatedMesh, scen
 	//joint->LocalMatrix = rotationMatrix * positionMatrix;
 
 	joint->LocalMatrix = positionMatrix * rotationMatrix;
+
 
 	//core::vector3df vr;
 	//bone.rot.toEuler(vr);
@@ -920,6 +915,7 @@ bool getAN8BoneNode(an8::an8_project* p, scene::ISkinnedMesh* AnimatedMesh, scen
     joint_data.parent_joint = inJoint;
     joint_data.joint = joint;
     joint_data.bone = bone;
+    joint_data.parent_length = parent_bone.length;
 
     getAN8MeshList(p, &bone.component, &meshList, &joint_data);
 
