@@ -122,6 +122,7 @@ double rc_Abs(double n)
     return n;
 }
 
+bool dbg_flag = true;
 
 irr::f32 an8_calculate_figure_transform(video::S3DVertex* vertex, an8::an8_irr_joint_data joint_data, int debug_vertex_count)
 {
@@ -137,16 +138,17 @@ irr::f32 an8_calculate_figure_transform(video::S3DVertex* vertex, an8::an8_irr_j
         return 0;
     }
 
-    if(vertex->Pos.X <= -36)
+    if(dbg_flag)
         debug_vertex_count = 11;
     else
         debug_vertex_count = 0;
 
     if(debug_vertex_count == 11)
     {
-        if(joint_data.bone.name.compare("bone03")!=0)
-            debug_vertex_count = 0;
+        //if(joint_data.bone.name.compare("bone03")!=0)
+          //  debug_vertex_count = 0;
     }
+    dbg_flag = false;
 
 	core::vector3df v_out= vertex->Pos;
 
@@ -209,7 +211,9 @@ irr::f32 an8_calculate_figure_transform(video::S3DVertex* vertex, an8::an8_irr_j
 	//joint_data.joint->LocalMatrix.getInverse(jm);
 	transform_matrix.getInverse(jm);
 
-	jm *= namedobject_matrix;
+
+	//jm *= namedobject_matrix;
+
 
 	//namedobject_matrix.transformVect(v_out);
 	jm.transformVect(v_out);
@@ -417,6 +421,8 @@ struct an8_rotation_key
 {
     int32_t frame;
     std::string axis;
+    std::string bone_name;
+    irr::scene::ISkinnedMesh::SJoint* joint;
     double angle;
 };
 
@@ -478,31 +484,38 @@ int an8_addKeys(an8::an8_project* p, scene::ISkinnedMesh* AnimatedMesh, int scen
             for(int key_index = 0; key_index < track->floatkey.size(); key_index++)
             {
                 a_fkey = track->floatkey[key_index];
-                irr::scene::ISkinnedMesh::SRotationKey* rkey = AnimatedMesh->addRotationKey(joint_data->joint);
+                //irr::scene::ISkinnedMesh::SRotationKey* rkey = AnimatedMesh->addRotationKey(joint_data->joint);
 
                 an8_rotation_key key;
+                key.bone_name = joint_data->bone.name;
                 key.frame = a_fkey.frame_index;
+                key.joint = joint_data->joint;
 
-                rkey->frame = (irr::f32)a_fkey.frame_index;
+                //rkey->frame = (irr::f32)a_fkey.frame_index;
                 if(c_axis.compare("X")==0)
                 {
-                    rkey->rotation.fromAngleAxis( core::degToRad(a_fkey.value), core::vector3df(1,0,0) );
+                    key.axis = "X";
+                    key.angle = a_fkey.value;
+                    //rkey->rotation.fromAngleAxis( core::degToRad(a_fkey.value), core::vector3df(1,0,0) );
                 }
                 else if(c_axis.compare("Y")==0)
                 {
-                    rkey->rotation.fromAngleAxis( core::degToRad(a_fkey.value), core::vector3df(0,1,0) );
+                    key.axis = "Y";
+                    key.angle = a_fkey.value;
+                    //rkey->rotation.fromAngleAxis( core::degToRad(a_fkey.value), core::vector3df(0,1,0) );
                 }
                 else if(c_axis.compare("Z")==0)
                 {
-                    rkey->rotation.fromAngleAxis( -1*core::degToRad(a_fkey.value), core::vector3df(0,0,1));
+                    key.axis = "Z";
+                    key.angle = a_fkey.value;
+                    //rkey->rotation.fromAngleAxis( -1*core::degToRad(a_fkey.value), core::vector3df(0,0,1));
                 }
 
+                bone_key.push_back(key);
 
-                core::matrix4 m = rkey->rotation.getMatrix();
-                std::cout << "rot key[" << joint_data->joint->RotationKeys.size()-1 << "] = frame(" << rkey->frame << ") rotation = " << m.getRotationDegrees().X << ", "
-                                                                                                   << m.getRotationDegrees().Y << ", "
-                                                                                                   << m.getRotationDegrees().Z << ", "
-                                                                                                   << std::endl;
+                //core::matrix4 m = rkey->rotation.getMatrix();
+                //std::cout << "rot key[" << joint_data->joint->RotationKeys.size()-1 << "] = frame(" << rkey->frame << ") rotation = " << m.getRotationDegrees().X << ", "
+                  //                                                                                 << std::endl;
             }
 
         }
@@ -556,6 +569,60 @@ int an8_addKeys(an8::an8_project* p, scene::ISkinnedMesh* AnimatedMesh, int scen
                                                                                                    << std::endl;
             }
         }
+
+    }
+
+    //loop through bone_key vector
+    core::quaternion rx, ry, rz;
+    bool xset = false;
+    bool yset = false;
+    bool zset = false;
+
+    for(int i = 0; i < bone_key.size(); i++)
+    {
+
+        xset = false;
+        yset = false;
+        zset = false;
+
+        if(bone_key[i].frame < 0)
+            continue;
+
+        int32_t frame = bone_key[i].frame;
+
+        irr::scene::ISkinnedMesh::SRotationKey* rkey = AnimatedMesh->addRotationKey(bone_key[i].joint);
+        rkey->frame = bone_key[i].frame;
+
+        for(int j = i; j < bone_key.size(); j++)
+        {
+            if(bone_key[j].frame == frame &&
+               bone_key[j].bone_name.compare(bone_key[i].bone_name)==0)
+            {
+                if(bone_key[j].axis.compare("X")==0)
+                {
+                    rx.fromAngleAxis( core::degToRad(bone_key[j].angle), core::vector3df(1,0,0) );
+                    xset = true;
+                }
+                else if(bone_key[j].axis.compare("Y")==0)
+                {
+                    ry.fromAngleAxis( core::degToRad(bone_key[j].angle), core::vector3df(0,1,0) );
+                    yset = true;
+                }
+                else if(bone_key[j].axis.compare("Z")==0)
+                {
+                    rz.fromAngleAxis( -1*core::degToRad(bone_key[j].angle), core::vector3df(0,0,1) );
+                    zset = true;
+                }
+                bone_key[j].frame = -1; //prevent this key from being applied again
+            }
+
+            if(xset && yset && zset)
+                break;
+        }
+
+        std::cout << "APPLY KEY: " << bone_key[i].bone_name << "[" << frame << "]" << std::endl;
+
+        rkey->rotation = rx*ry*rz;
 
     }
 
@@ -1257,7 +1324,11 @@ void drawJointCircles(IrrlichtDevice *device, scene::ICameraSceneNode* camera, i
         irr::core::vector2di screenPos = collMan->getScreenCoordinatesFrom3DPosition(jointPos, camera);
 
         // Draw the circle on the screen
-        driver->draw2DPolygon(screenPos, radius, color[i], 16);
+        irr::video::SColor c(255,255,255,255);
+        if(i <= 4)
+            c = color[i];
+
+        driver->draw2DPolygon(screenPos, radius, c, 16);
 
         if(!drawJoints_Init)
         {
