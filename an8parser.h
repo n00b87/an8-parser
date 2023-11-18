@@ -539,6 +539,8 @@ struct an8_irr_joint_data
     //vector<irr::u32> meshBufferIndex; //This is a list of meshes weighted by this bone
     irr::scene::ISkinnedMesh::SJoint *parent_joint;
     double parent_length;
+    irr::core::matrix4 GlobalMatrix;
+
 };
 
 struct an8_project

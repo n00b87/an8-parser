@@ -123,6 +123,7 @@ double rc_Abs(double n)
 }
 
 bool dbg_flag = true;
+int dbg_count = 0;
 
 irr::f32 an8_calculate_figure_transform(video::S3DVertex* vertex, an8::an8_irr_joint_data joint_data, int debug_vertex_count)
 {
@@ -138,17 +139,28 @@ irr::f32 an8_calculate_figure_transform(video::S3DVertex* vertex, an8::an8_irr_j
         return 0;
     }
 
+
     if(dbg_flag)
         debug_vertex_count = 11;
     else
         debug_vertex_count = 0;
 
+
+    /*
     if(debug_vertex_count == 11)
     {
-        //if(joint_data.bone.name.compare("bone03")!=0)
-          //  debug_vertex_count = 0;
+        if(joint_data.bone.name.compare("bone05")==0)// &&
+           //((int)vertex->Pos.X == 5) &&
+           //((int)vertex->Pos.Y == -42) &&
+           //((int)vertex->Pos.Z == -8) )
+            debug_vertex_count = 11;
+        else
+            debug_vertex_count = 0;
     }
+    */
+
     dbg_flag = false;
+
 
 	core::vector3df v_out= vertex->Pos;
 
@@ -186,6 +198,7 @@ irr::f32 an8_calculate_figure_transform(video::S3DVertex* vertex, an8::an8_irr_j
 
 	if(namedobject->name_block.name.compare("namedobject01")==0 && debug_vertex_count == 11)
 	{
+	    std::cout << "Bone (" << joint_data.bone.name << ")" << std::endl;
 	    std::cout << std::endl;
 	    std::cout << "Tranform: " << transform_matrix.getTranslation().X << ", "
                                   << transform_matrix.getTranslation().Y << ", "
@@ -206,25 +219,48 @@ irr::f32 an8_calculate_figure_transform(video::S3DVertex* vertex, an8::an8_irr_j
 
 	//transform the vertex to its namedobject orientation
 	// NOTE: In this orientation, the joint is pointing straight up so its much easier to check where the vertex is in the influence area
+	core::matrix4 joint_transform_matrix = joint_data.GlobalMatrix;
+	//joint_data.GlobalMatrix.getInverse(joint_transform_matrix);
+
 	core::matrix4 jm;
+	core::matrix4 lm;
 	//joint_data.joint->GlobalMatrix.getInverse(jm);
 	//joint_data.joint->LocalMatrix.getInverse(jm);
-	transform_matrix.getInverse(jm);
+	//transform_matrix.getInverse(jm);
+	core::quaternion lmq = core::quaternion(joint_data.bone.orientation.x,
+                                            joint_data.bone.orientation.y,
+                                            joint_data.bone.orientation.z,
+                                            joint_data.bone.orientation.w);
+    lm.setTranslation(joint_data.bone.pos);
+    lm = lmq.getMatrix() * lm;
+    //lm.getInverse(jm);
 
+    joint_transform_matrix.getInverse(jm);
+    core::vector3df adj_translate = joint_data.bone.pos;
 
 	//jm *= namedobject_matrix;
 
 
-	//namedobject_matrix.transformVect(v_out);
+	namedobject_matrix.transformVect(v_out);
+	///jm.transformVect(v_out);
+
+	v_out = v_out - joint_data.bone.pos;
 	jm.transformVect(v_out);
+	//joint_transform_matrix.transformVect(v_out);
 
 	core::vector3df parent_translate_vector(0, joint_data.parent_length, 0);
-	v_out = v_out - parent_translate_vector;
+	//v_out = v_out - parent_translate_vector;
+
+	//v_out.Z *= -1;
 
 	if(debug_vertex_count == 11)
 	std::cout << "Local Matrix = " << v_out.X << ", "
                                    << v_out.Y << ", "
-                                   << v_out.Z << "  ----  " << parent_translate_vector.Y
+                                   << v_out.Z << "  ----  " << jm.getTranslation().Y
+                                   << " --- "
+                                   << adj_translate.X << ", "
+                                   << adj_translate.Y << ", "
+                                   << adj_translate.Z
                                    << std::endl << std::endl;
 
 
@@ -338,8 +374,8 @@ irr::f32 an8_calculate_figure_transform(video::S3DVertex* vertex, an8::an8_irr_j
     if(debug_vertex_count == 11)
         std::cout << "Vertex Weight = " << weight << std::endl << std::endl;
 
-    //if(joint_data.namedobject[joint_data.namedobject_index].base_bone.compare(joint_data.bone.name)==0)
-      //  weight = 0.001;
+    if(joint_data.namedobject[joint_data.namedobject_index].base_bone.compare(joint_data.bone.name)==0)
+        weight = 0.001;
 
 	return weight;
 }
@@ -529,7 +565,7 @@ int an8_addKeys(an8::an8_project* p, scene::ISkinnedMesh* AnimatedMesh, int scen
             else
                 continue;
 
-            if(0)
+            //if(0)
             for(int key_index = 0; key_index < track->pointkey.size(); key_index++)
             {
                 a_pkey = track->pointkey[key_index];
@@ -610,7 +646,7 @@ int an8_addKeys(an8::an8_project* p, scene::ISkinnedMesh* AnimatedMesh, int scen
                 }
                 else if(bone_key[j].axis.compare("Z")==0)
                 {
-                    rz.fromAngleAxis( -1*core::degToRad(bone_key[j].angle), core::vector3df(0,0,1) );
+                    rz.fromAngleAxis( core::degToRad(bone_key[j].angle), core::vector3df(0,0,1) );
                     zset = true;
                 }
                 bone_key[j].frame = -1; //prevent this key from being applied again
@@ -718,7 +754,7 @@ scene::SSkinMeshBuffer* addAN8MeshBuffer(an8::an8_project* p, scene::ISkinnedMes
                 //std::cout << "(" << texture.u << ", " << texture.v << ")" << std::endl << std::endl;
             }
 
-            v.Pos.set(point.x, point.y, -point.z);
+            v.Pos.set(point.x, point.y, point.z);
             //std::cout << "DBG POINT: (" << v.Pos.X << ", " << v.Pos.Y << ", " << v.Pos.Z << ") to ";
             transform_matrix.transformVect(v.Pos);
             //std::cout << "(" << v.Pos.X << ", " << v.Pos.Y << ", " << v.Pos.Z << ")" << std::endl;
@@ -784,13 +820,13 @@ core::vector3df vectorRadiansToDegrees(core::vector3df r)
     return core::vector3df( core::radToDeg(r.X), core::radToDeg(r.Y), core::radToDeg(r.Z) );
 }
 
-core::matrix4 calculate_bone_matrix(scene::ISkinnedMesh::SJoint* inJoint, an8::an8_bone* bone, an8::an8_bone* parent, bool should_translate=true)
+core::matrix4 calculate_bone_matrix(scene::ISkinnedMesh::SJoint* inJoint, an8::an8_bone* parent, bool should_translate=true)
 {
     //bone 4
     core::vector3df tvec( 0, parent->length, 0);
     core::quaternion q(parent->orientation.x,
                        parent->orientation.y,
-                       parent->orientation.z,
+                       -parent->orientation.z,
                        parent->orientation.w);
 
 
@@ -799,8 +835,6 @@ core::matrix4 calculate_bone_matrix(scene::ISkinnedMesh::SJoint* inJoint, an8::a
     core::vector3df t = tvec;
     core::matrix4 m = inJoint->GlobalMatrix;
     core::vector3df old_rotation = m.getRotationDegrees();
-
-    //std::cout << "\nOLD ROT[" << bone->name <<"] = " << old_rotation.X << ", " << old_rotation.Y << ", " << old_rotation.Z << std::endl;
 
     core::vector3df angle;
     q.toEuler(angle);
@@ -815,79 +849,14 @@ core::matrix4 calculate_bone_matrix(scene::ISkinnedMesh::SJoint* inJoint, an8::a
 
     if(should_translate)
         m = tm * m;
-    //m.setTranslation(old_pos);
-    //m.transformVect(t);
-    //t += old_pos;
 
     return m;
 
 }
 
-irr::core::matrix4 rotateAxesXYZToEuler2(const irr::core::vector3df& oldRotation, const irr::core::vector3df& rotationAngles, bool useLocalAxes)
-{
-    irr::core::matrix4 transformation;
-    transformation.setRotationDegrees(oldRotation);
-    irr::core::vector3df axisX(1,0,0), axisY(0,1,0), axisZ(0,0,1);
-    irr::core::matrix4 matRotX, matRotY, matRotZ;
-
-    if ( useLocalAxes )
-    {
-        transformation.rotateVect(axisX);
-        transformation.rotateVect(axisY);
-        transformation.rotateVect(axisZ);
-    }
-
-    matRotX.setRotationAxisRadians(rotationAngles.X*irr::core::DEGTORAD, axisX);
-    matRotY.setRotationAxisRadians(rotationAngles.Y*irr::core::DEGTORAD, axisY);
-    matRotZ.setRotationAxisRadians(rotationAngles.Z*irr::core::DEGTORAD, axisZ);
-
-    irr::core::matrix4 newTransform = matRotZ * matRotY * matRotX * transformation;
-    return newTransform;
-}
-
-core::matrix4 calculate_bone_localMatrix(core::matrix4 transform_m, an8::an8_bone* bone, an8::an8_bone* parent)
-{
-    //bone 4
-    core::vector3df tvec( 0, parent->length, 0);
-    core::quaternion q(bone->orientation.x,
-                       bone->orientation.y,
-                       bone->orientation.z,
-                       bone->orientation.w);
-
-
-
-    core::vector3df old_pos = bone->pos;
-    core::vector3df t = tvec;
-    core::matrix4 m = transform_m;
-    core::vector3df old_rotation = m.getRotationDegrees();
-
-    core::vector3df angle;
-    q.toEuler(angle);
-
-    angle = vectorRadiansToDegrees(angle);
-
-    m = rotateAxesXYZToEuler2(old_rotation, angle, true);
-
-    //m.setTranslation(tvec);
-    core::matrix4 tm;
-    tm.setTranslation(tvec);
-    m *= tm;
-
-    t = core::vector3df(0,32.359,0);
-    m.transformVect(t);
-
-    std::cout << "TRANSFORM[" << bone->name << "] = " << t.X << ", " << t.Y << ", " << t.Z << std::endl;
-
-
-    //m.transformVect(t);
-    //t += old_pos;
-
-    return transform_m;
-
-}
 
 //get the bone data for a figure
-bool getAN8BoneNode(an8::an8_project* p, scene::ISkinnedMesh* AnimatedMesh, scene::ISkinnedMesh::SJoint* inJoint, an8::an8_bone bone, an8::an8_bone parent_bone)
+bool getAN8BoneNode(an8::an8_project* p, scene::ISkinnedMesh* AnimatedMesh, scene::ISkinnedMesh::SJoint* inJoint, an8::an8_bone bone, an8::an8_bone parent_bone, an8::an8_irr_joint_data* parent_joint_data)
 {
 	scene::ISkinnedMesh::SJoint *joint = AnimatedMesh->addJoint(inJoint);
 	joint->Name = bone.name.c_str();
@@ -904,10 +873,10 @@ bool getAN8BoneNode(an8::an8_project* p, scene::ISkinnedMesh* AnimatedMesh, scen
 
 	if(inJoint)
     {
-        joint->GlobalMatrix = calculate_bone_matrix(inJoint, &bone, &parent_bone, true);
+        joint->GlobalMatrix = calculate_bone_matrix(inJoint, &parent_bone, true);
         position.Y = parent_bone.length;
 
-        tm = calculate_bone_matrix(inJoint, &bone, &parent_bone, false);
+        tm = calculate_bone_matrix(inJoint, &parent_bone, false);
     }
 
     core::quaternion orient = core::quaternion(-bone.orientation.x,
@@ -964,6 +933,7 @@ bool getAN8BoneNode(an8::an8_project* p, scene::ISkinnedMesh* AnimatedMesh, scen
 	joint->LocalMatrix = positionMatrix * rotationMatrix;
 
 
+
 	//core::vector3df vr;
 	//bone.rot.toEuler(vr);
 	//joint->LocalMatrix.setRotationRadians( core::vector3df(vr.X, vr.Y, -vr.Z));
@@ -983,6 +953,11 @@ bool getAN8BoneNode(an8::an8_project* p, scene::ISkinnedMesh* AnimatedMesh, scen
     joint_data.joint = joint;
     joint_data.bone = bone;
     joint_data.parent_length = parent_bone.length;
+
+
+    joint_data.GlobalMatrix = calculate_bone_matrix(joint, &bone, false);
+
+
 
     getAN8MeshList(p, &bone.component, &meshList, &joint_data);
 
@@ -1077,7 +1052,7 @@ bool getAN8BoneNode(an8::an8_project* p, scene::ISkinnedMesh* AnimatedMesh, scen
     //std::cout << "start: " << bone.name << ": " << bone.bone.size() << std::endl;
     for(int i = 0; i < bone.bone.size(); i++)
     {
-        getAN8BoneNode(p, AnimatedMesh, joint, bone.bone[i], bone);
+        getAN8BoneNode(p, AnimatedMesh, joint, bone.bone[i], bone, &joint_data);
     }
     //std::cout << "end: " << bone.name << std::endl;
 
@@ -1164,7 +1139,7 @@ scene::IAnimatedMesh* loadAN8Scene(IrrlichtDevice* device, an8::an8_project a_fi
 
                 figure.bone.length = 0;
 
-                getAN8BoneNode(&a_file, mesh, (scene::ISkinnedMesh::SJoint*)0, figure.bone, figure.bone);
+                getAN8BoneNode(&a_file, mesh, (scene::ISkinnedMesh::SJoint*)0, figure.bone, figure.bone, (an8::an8_irr_joint_data*)0);
                 //break;
 
 
@@ -1229,6 +1204,8 @@ scene::IAnimatedMesh* loadAN8Scene(IrrlichtDevice* device, an8::an8_project a_fi
                                 figure_transformed_meshBuffers.push_back(omb);
                             }
 
+                            dbg_flag = true;
+
                             for(int vert_index = 0; vert_index < mesh_buffer->Vertices_Standard.size(); vert_index++)
                             {
                                 video::S3DVertex vertex;
@@ -1279,8 +1256,8 @@ scene::IAnimatedMesh* loadAN8Scene(IrrlichtDevice* device, an8::an8_project a_fi
 
     mesh->finalize();
 
-    //irr::scene::IMeshManipulator *meshManip = device->getSceneManager()->getMeshManipulator();
-    //meshManip->flipSurfaces(mesh);
+    irr::scene::IMeshManipulator *meshManip = device->getSceneManager()->getMeshManipulator();
+    meshManip->flipSurfaces(mesh);
 
     return mesh;
 }
@@ -1447,8 +1424,8 @@ int main()
 	video::SMaterial material;
 
 
-	an8::an8_project p = an8::loadAN8("assets/test4.an8");
-	//an8::an8_project p = an8::loadAN8("assets/knight_f4.an8");
+	//an8::an8_project p = an8::loadAN8("assets/test4.an8");
+	an8::an8_project p = an8::loadAN8("assets/knight_f4.an8");
 
 	std::cout << "test load: " << p.scenes.size() << std::endl;
 	//device->drop();
@@ -1468,7 +1445,7 @@ int main()
 	node->setAnimationSpeed(12);
 	//node->setFrameLoop(0, 51);
 	node->setLoopMode(true);
-	//node->setPosition( node->getPosition() + core::vector3df(0,-160,0));
+	//node->setPosition( node->getPosition() + core::vector3df(0,130,0));
 	std::cout << "node: " << node->getMesh()->getFrameCount() << std::endl;
 	material.setTexture(0, driver->getTexture("assets/knight_f_texture.bmp"));
 	material.Lighting = false;
