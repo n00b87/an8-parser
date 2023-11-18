@@ -754,7 +754,7 @@ scene::SSkinMeshBuffer* addAN8MeshBuffer(an8::an8_project* p, scene::ISkinnedMes
                 //std::cout << "(" << texture.u << ", " << texture.v << ")" << std::endl << std::endl;
             }
 
-            v.Pos.set(point.x, point.y, point.z);
+            v.Pos.set(-point.x, point.y, point.z);
             //std::cout << "DBG POINT: (" << v.Pos.X << ", " << v.Pos.Y << ", " << v.Pos.Z << ") to ";
             transform_matrix.transformVect(v.Pos);
             //std::cout << "(" << v.Pos.X << ", " << v.Pos.Y << ", " << v.Pos.Z << ")" << std::endl;
@@ -1256,8 +1256,8 @@ scene::IAnimatedMesh* loadAN8Scene(IrrlichtDevice* device, an8::an8_project a_fi
 
     mesh->finalize();
 
-    irr::scene::IMeshManipulator *meshManip = device->getSceneManager()->getMeshManipulator();
-    meshManip->flipSurfaces(mesh);
+    //irr::scene::IMeshManipulator *meshManip = device->getSceneManager()->getMeshManipulator();
+    //meshManip->flipSurfaces(mesh);
 
     return mesh;
 }
