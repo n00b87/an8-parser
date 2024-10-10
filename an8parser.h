@@ -6,7 +6,7 @@
 #include <vector>
 #include <stack>
 #include <string>
-#include <irrlicht/irrlicht.h>
+#include <irrlicht.h>
 #include <cmath>
 
 #ifdef IRRLICHT_SDK_VERSION
@@ -14,7 +14,7 @@
 #endif // IRRLICHT_SDK_VERSION
 
 //#define AN8_DEBUG 1
-
+#define AN8_IRRLICHT
 
 namespace an8
 {
@@ -669,19 +669,24 @@ void getSurfaceProperty(an8_surface_property* surf_property, an8_file_block* blo
         if(c_block->name.compare("rgb")==0)
         {
             std::string c_value = c_block->value + " ";
-            std::string c_str = "";
+            std::string c_num = "";
             uint8_t c[3];
             int ci = 0;
+            //std::cout << "c_value = " << c_value << std::endl;
             for(int j = 0; j < c_value.length(); j++)
             {
                 if(c_value.substr(j,1).compare(" ")==0)
                 {
-                    c[ci] = atoi(c_value.c_str());
+                    c[ci] = atoi(c_num.c_str());
                     ci++;
+
+                    c_num = "";
 
                     if(ci >= 3)
                         break;
                 }
+                else
+                    c_num += c_value.substr(j,1);
 
             }
 
@@ -689,7 +694,7 @@ void getSurfaceProperty(an8_surface_property* surf_property, an8_file_block* blo
             color.r = c[0];
             color.g = c[1];
             color.b = c[2];
-            //cout << "color = " << (int)c[0] << ", " << (int)c[1] << ", " << (int)c[2] << endl;
+            //std::cout << "color = " << (int)c[0] << ", " << (int)c[1] << ", " << (int)c[2] << std::endl;
             surf_property->color = color;
         }
         else if(c_block->name.compare("factor")==0)
@@ -784,11 +789,11 @@ void getSurface(an8_material* mat, an8_file_block* block)
                 }
                 else if(c_block->block[j].name.compare("brilliance")==0)
                 {
-                    surface.brilliance = atof(c_block->block[i].value.c_str());
+                    surface.brilliance = atof(c_block->block[j].value.c_str());
                 }
                 else if(c_block->block[j].name.compare("phongsize")==0)
                 {
-                    surface.phongsize = atof(c_block->block[i].value.c_str());
+                    surface.phongsize = atof(c_block->block[j].value.c_str());
                 }
                 else if(c_block->block[j].name.compare("map")==0)
                 {
@@ -1651,8 +1656,24 @@ void getObject(an8_project* project, an8_file_block* block)
         {
             an8_object obj;
             obj.name = c_block->obj_name;
-            getMaterial(&obj, c_block);
+            getMaterial(&obj, c_block); //std::cout << "obj[" << obj.name << "] -> " << obj.material.size() << std::endl;
             getComponent(&obj.component, c_block);
+
+            //set mesh materials from object material list here
+            for(int c_index = 0; c_index < obj.component.size(); c_index++)
+            {
+                if(obj.component[c_index].type == AN8_COMPONENT_TYPE_MESH)
+                {
+                    for(int mat_index = 0; mat_index < obj.material.size(); mat_index++)
+                    {
+                        if(obj.component[c_index].mesh.material.name.compare(obj.material[mat_index].name)==0)
+                            obj.component[c_index].mesh.material = obj.material[mat_index];
+                    }
+                }
+            }
+
+            //------------------------------------------------
+
             project->objects.push_back(obj);
         }
     }
@@ -3277,6 +3298,37 @@ scene::SSkinMeshBuffer* addAN8MeshBuffer(an8::an8_project* p, scene::ISkinnedMes
     vertices.clear();
 
     video::S3DVertex v;
+
+    //std::cout << "debug[" << mesh.name << "][material]=" << mesh.material.name << std::endl;
+
+    //std::cout << "mat[col] " << (int)mesh.material.surface. << std::endl;
+    //std::cout << "mat[shininess] " << (int)mesh.material.surface.brilliance << std::endl;
+
+    //-----Set Material------
+    an8_material a_mat = mesh.material;
+    an8_surface_property a_prop;
+
+    a_prop = a_mat.surface.ambient;
+    irr::video::SColor ambient = irr::video::SColor(255, a_prop.color.r, a_prop.color.g, a_prop.color.b);
+
+    a_prop = a_mat.surface.diffuse;
+    irr::video::SColor diffuse = irr::video::SColor(255, a_prop.color.r, a_prop.color.g, a_prop.color.b);
+
+    a_prop = a_mat.surface.emissive;
+    irr::video::SColor emissive = irr::video::SColor(255, a_prop.color.r, a_prop.color.g, a_prop.color.b);
+
+    a_prop = a_mat.surface.specular;
+    irr::video::SColor specular = irr::video::SColor(255, a_prop.color.r, a_prop.color.g, a_prop.color.b);
+
+    meshBuffer->getMaterial().Shininess = a_mat.surface.brilliance;
+
+    meshBuffer->getMaterial().AmbientColor = ambient;
+    meshBuffer->getMaterial().DiffuseColor = diffuse;
+    meshBuffer->getMaterial().EmissiveColor = emissive;
+    meshBuffer->getMaterial().SpecularColor = specular;
+
+
+    //-----------------------
 
     //-----Transformations applied to mesh in Object view in Anim8or-------
     core::matrix4 transform_matrix;
