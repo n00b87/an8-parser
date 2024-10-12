@@ -757,6 +757,20 @@ void getSurface(an8_material* mat, an8_file_block* block)
         {
             an8_surface surface;
 
+            an8_surface_property default_property;
+            default_property.color.r = 0;
+            default_property.color.g = 0;
+            default_property.color.b = 0;
+
+            surface.ambient = default_property;
+            surface.diffuse = default_property;
+            surface.emissive = default_property;
+            surface.specular = default_property;
+
+            surface.alpha = 255;
+            surface.brilliance = 1.0;
+            surface.lockambdiff = false;
+
             for(int j = 0; j < c_block->block.size(); j++)
             {
                 if(c_block->block[j].name.compare("ambient")==0)
@@ -3320,12 +3334,27 @@ scene::SSkinMeshBuffer* addAN8MeshBuffer(an8::an8_project* p, scene::ISkinnedMes
     a_prop = a_mat.surface.specular;
     irr::video::SColor specular = irr::video::SColor(255, a_prop.color.r, a_prop.color.g, a_prop.color.b);
 
-    meshBuffer->getMaterial().Shininess = a_mat.surface.brilliance;
+    meshBuffer->getMaterial().Shininess = ( (a_mat.surface.specular.factor) == 0 ? 0 : 128 - (a_mat.surface.specular.factor * 100) );
+
+    //meshBuffer->getMaterial().MaterialType = irr::video::EMT_PARALLAX_MAP_SOLID;
+    emissive.set(0);
 
     meshBuffer->getMaterial().AmbientColor = ambient;
     meshBuffer->getMaterial().DiffuseColor = diffuse;
     meshBuffer->getMaterial().EmissiveColor = emissive;
     meshBuffer->getMaterial().SpecularColor = specular;
+
+    irr::video::SColor vert_color = diffuse;
+
+    if(a_mat.surface.diffuse.texturename.compare("")!=0)
+        vert_color.set(255,255,255,255);
+
+    //meshBuffer->getMaterial().Lighting = false;
+
+    //meshBuffer->getMaterial().BlendOperation = irr::video::EBO_ADD;
+
+    //std::cout << "Emissive: " << emissive.getRed() << ", " << emissive.getGreen() << ", " << emissive.getBlue() << std::endl;
+    //std::cout << "Phong: " << a_mat.surface.phongsize << std::endl;
 
 
     //-----------------------
@@ -3394,7 +3423,8 @@ scene::SSkinMeshBuffer* addAN8MeshBuffer(an8::an8_project* p, scene::ISkinnedMes
 
             //I do 1 minus the texture v because the way anim8or expects the texture buffer to be aligned is just weird
             v.TCoords.set(texture.u, 1-texture.v);
-            v.Color.set(255,255,255,255);
+            //v.Color.set(255,255,255,255);
+            v.Color.set(vert_color.color);
 
             vertices.push_back(v);
 
