@@ -558,6 +558,8 @@ struct an8_irr_joint_data
 
 struct an8_project
 {
+	bool exists;
+
     an8_header header;
     an8_description description;
     an8_environment environment;
@@ -2660,9 +2662,25 @@ void getScene(an8_project* project, an8_file_block* block)
 
 }
 
+int an8_fileExists(std::string tgt_file)
+{
+    std::ifstream infile(tgt_file.c_str());
+    bool fx = infile.good();
+    infile.close();
+    return (int)fx;
+}
+
 an8_project loadAN8(std::string an8_project_file)
 {
     an8_project project;
+
+    project.exists = false;
+
+    if(!an8_fileExists(an8_project_file))
+		return project;
+
+	project.exists = true;
+
     int an8_file_scope = 0;
     std::string an8_file_content;
 
