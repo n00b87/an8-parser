@@ -8,6 +8,7 @@
 #include <string>
 #include <irrlicht.h>
 #include <cmath>
+#include <cstdint>
 
 #ifdef IRRLICHT_SDK_VERSION
 #define AN8_IRRLICHT
@@ -2921,6 +2922,13 @@ double rc_Abs(double n)
     return n;
 }
 
+bool quat_isZero(irr::core::quaternion q)
+{
+	if(q.X == 0 && q.Y == 0 && q.Z == 0 && q.W == 0)
+		return true;
+
+	return false;
+}
 
 irr::f32 an8_calculate_figure_transform(video::S3DVertex* vertex, an8::an8_irr_joint_data* joint_data, int debug_vertex_count)
 {
@@ -2962,7 +2970,7 @@ irr::f32 an8_calculate_figure_transform(video::S3DVertex* vertex, an8::an8_irr_j
 
     core::matrix4 namedobject_matrix;
     namedobject_matrix.setTranslation(namedobject_translate_vector);
-    namedobject_matrix *= q.getMatrix();
+    namedobject_matrix *= (quat_isZero(q) ? irr::core::IdentityMatrix : q.getMatrix());
     //--------------------------------------------------------------------
 
 
@@ -3417,7 +3425,7 @@ scene::SSkinMeshBuffer* addAN8MeshBuffer(an8::an8_project* p, scene::ISkinnedMes
             int normal_index = face.point_data[point_index].normal_index;
             an8::an8_point3f normal = default_normal;
 
-            if(normal_index >= 0)
+            if(normal_index >= 0 && normal_index < mesh.normals.size())
             {
                 normal = mesh.normals[normal_index];
             }
@@ -3425,7 +3433,7 @@ scene::SSkinMeshBuffer* addAN8MeshBuffer(an8::an8_project* p, scene::ISkinnedMes
             int texture_index = face.point_data[point_index].texture_index;
             an8::an8_uv texture = default_texture;
 
-            if(texture_index >= 0)
+            if(texture_index >= 0 && texture_index < mesh.texcoords.size())
             {
                 texture = mesh.texcoords[texture_index];
             }
@@ -3624,7 +3632,7 @@ bool getAN8BoneNode(an8::an8_project* p, scene::ISkinnedMesh* AnimatedMesh, scen
                     meshBuffer->Transformation.setTranslation(nobj_translate);
 
                     core::quaternion nobj_rotate(-n_obj->base.orientation.x, -n_obj->base.orientation.y, n_obj->base.orientation.z, n_obj->base.orientation.w);
-                    meshBuffer->Transformation *= nobj_rotate.getMatrix();
+                    meshBuffer->Transformation *= (quat_isZero(nobj_rotate) ? irr::core::IdentityMatrix : nobj_rotate.getMatrix());
                 }
             }
         }
