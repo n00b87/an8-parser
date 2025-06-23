@@ -10,6 +10,12 @@
 #include <cmath>
 #include <cstdint>
 
+#ifdef __ANDROID__
+#include <SDL.h>
+#else
+#include <SDL2/SDL.h>
+#endif // __ANDROID__
+
 #ifdef IRRLICHT_SDK_VERSION
 #define AN8_IRRLICHT
 #endif // IRRLICHT_SDK_VERSION
@@ -2671,6 +2677,32 @@ int an8_fileExists(std::string tgt_file)
     return (int)fx;
 }
 
+
+std::string an8_fileReadLine(SDL_RWops* f_stream, bool* rc_eof)
+{
+    std::string rline = "";
+    unsigned char buf[5];
+    if(SDL_RWread(f_stream, buf, 1, 1)==0)
+    {
+        *rc_eof = true;
+        return "";
+    }
+    while(buf[0]!='\0' && buf[0]!='\n' && buf[0]!='\r')
+    {
+        rline.append(1,buf[0]);
+        if(SDL_RWread(f_stream, buf, 1, 1)==0)
+        {
+            *rc_eof = true;
+            break;
+        }
+    }
+    if(buf[0]=='\r')
+        SDL_RWread(f_stream, buf, 1, 1);
+
+    return rline;
+}
+
+
 an8_project loadAN8(std::string an8_project_file)
 {
     an8_project project;
@@ -2686,18 +2718,20 @@ an8_project loadAN8(std::string an8_project_file)
     std::string an8_file_content;
 
     // Read File
-    std::fstream f;
-    f.open(an8_project_file.c_str(), std::fstream::in);
+    SDL_RWops* rw_file = SDL_RWFromFile(an8_project_file.c_str(), "r");
 
     std::string f_line = "";
 
-    while( !f.eof() )
+    bool rw_eof = false;
+
+    while( !rw_eof )
     {
-        getline(f, f_line);
+        f_line = an8_fileReadLine(rw_file, &rw_eof);
+
         an8_file_content += f_line + "\n";
     }
 
-    f.close();
+    SDL_RWclose(rw_file);
     // End Read File
 
 
