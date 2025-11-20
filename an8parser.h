@@ -273,6 +273,12 @@ struct an8_meshWeights
     std::vector<an8_vertexWeight> vertexWeight;
 };
 
+
+struct an8_meshbuffer_data
+{
+    irr::core::array<int> meshbuffer_vertex_id;
+};
+
 struct an8_namedobject
 {
     std::string name;
@@ -290,6 +296,7 @@ struct an8_namedobject
     // Note: Each named object will only have one object but
     //       an object can have multiple meshes
     std::vector<irr::scene::SSkinMeshBuffer*> meshBufferList;
+    std::vector<an8_meshbuffer_data> meshBufferData;  // 1 for each mesh buffer
     std::string base_bone; //base transformations will happen from this bone
     #endif // AN8_IRRLICHT
 };
@@ -376,6 +383,7 @@ struct an8_figure
     std::string name;
     std::vector<an8_material> material;
     an8_bone bone;
+    bool useWeights;
 };
 
 struct an8_floatkey
@@ -1595,6 +1603,7 @@ void getNamedObject(an8_namedobject* named_object, an8_file_block* block)
         {
             an8_meshWeights weights;
             getWeights(&weights, c_block);
+            named_object->meshWeights.push_back(weights);
         }
     }
 
@@ -1795,10 +1804,10 @@ void getInfluence(an8_influence* inf, an8_file_block* block)
 
 }
 
-void getBone(an8_bone* bone, an8_file_block* block)
+int getBone(an8_bone* bone, an8_file_block* block)
 {
     if(block->block.size() == 0)
-        return;
+        return 0;
 
     an8_file_block* c_block;
 
@@ -1812,7 +1821,21 @@ void getBone(an8_bone* bone, an8_file_block* block)
     getBase(&base, block);
     bone->orientation = base.orientation;
 
+    int ret_val = 0;
+
     getComponent(&bone->component, block);
+
+    for(int i = 0; i < bone->component.size(); i++)
+    {
+        if(bone->component[i].type = AN8_COMPONENT_TYPE_NAMEDOBJECT)
+        {
+            if(bone->component[i].named_object.meshWeights.size() > 0)
+            {
+                ret_val = 1;
+                break;
+            }
+        }
+    }
 
     for(int i = 0; i < block->block.size(); i++)
     {
@@ -1821,7 +1844,10 @@ void getBone(an8_bone* bone, an8_file_block* block)
         if(c_block->name.compare("bone")==0)
         {
             an8_bone sub_bone;
-            getBone(&sub_bone, c_block);
+
+            if(getBone(&sub_bone, c_block) > 0)
+                ret_val = 1;
+
             bone->bone.push_back(sub_bone);
         }
         else if(c_block->name.compare("length")==0)
@@ -1869,6 +1895,8 @@ void getBone(an8_bone* bone, an8_file_block* block)
         }
     }
 
+    return ret_val;
+
 }
 
 void getFigure(an8_project* project, an8_file_block* block)
@@ -1888,6 +1916,7 @@ void getFigure(an8_project* project, an8_file_block* block)
 
             an8_figure figure;
             figure.name = c_block->obj_name;
+            figure.useWeights = false;
             getMaterial(&figure, c_block);
 
             an8_bone root_bone;
@@ -1898,7 +1927,7 @@ void getFigure(an8_project* project, an8_file_block* block)
                 c2_block = &c_block->block[i];
                 if(c2_block->name.compare("bone")==0)
                 {
-                    getBone(&root_bone, c2_block);
+                    figure.useWeights = (bool)getBone(&root_bone, c2_block);
                     break;
                 }
             }
@@ -2863,6 +2892,7 @@ using namespace video;
 using namespace io;
 using namespace gui;
 
+an8_meshbuffer_data tmp_meshbuffer_data;
 
 
 bool getAN8Figure(an8::an8_project* p, std::string figure_name, an8::an8_figure* figure)
@@ -2964,7 +2994,7 @@ bool quat_isZero(irr::core::quaternion q)
 	return false;
 }
 
-irr::f32 an8_calculate_figure_transform(video::S3DVertex* vertex, an8::an8_irr_joint_data* joint_data, int debug_vertex_count)
+irr::f32 an8_calculate_figure_transform(video::S3DVertex* vertex, an8::an8_irr_joint_data* joint_data, int vert_index, bool useWeights)
 {
     if(!joint_data)
         return 0;
@@ -3033,6 +3063,36 @@ irr::f32 an8_calculate_figure_transform(video::S3DVertex* vertex, an8::an8_irr_j
 	jm.transformVect(v_out);
 
 	core::vector3df parent_translate_vector(0, joint_data->parent_length, 0);
+
+
+
+
+	bool has_weight_object = false;
+
+	for(int i = 0; i < joint_data->bone.component.size(); i++)
+    {
+        if(joint_data->bone.component[i].type == AN8_COMPONENT_TYPE_NAMEDOBJECT)
+        {
+            if(joint_data->bone.component[i].named_object.meshWeights.size() > 0)
+            {
+                if(joint_data->bone.component[i].named_object.meshWeights[0].vertexWeight.size() > vert_index)
+                {
+                    if(joint_data->bone.component[i].named_object.meshWeights[0].vertexWeight[vert_index].boneWeight.size() > 0)
+                    {
+                        //std::cout << "Vert Weight: " << joint_data->bone.component[i].named_object.meshWeights[0].vertexWeight[vert_index].boneWeight[0].weight << std::endl;
+                        return joint_data->bone.component[i].named_object.meshWeights[0].vertexWeight[vert_index].boneWeight[0].weight;
+                    }
+                }
+                //std::cout << "DEBUG: " << vert_index << ", " << joint_data->bone.component[i].named_object.meshWeights[0].vertexWeight.size() << std::endl;
+            }
+        }
+    }
+
+    //if(useWeights)
+    //{
+        //std::cout << "NO BUENO: " << vert_index << std::endl;
+        //return 0.1;
+    //}
 
 
     //Anim8or weight capsule (NOTE: I call it a capsule but one end can have a larger radius than the other)
@@ -3373,6 +3433,8 @@ scene::SSkinMeshBuffer* addAN8MeshBuffer(an8::an8_project* p, scene::ISkinnedMes
 
     video::S3DVertex v;
 
+    tmp_meshbuffer_data.meshbuffer_vertex_id.clear();
+
     //std::cout << "debug[" << mesh.name << "][material]=" << mesh.material.name << std::endl;
 
     //std::cout << "mat[col] " << (int)mesh.material.surface. << std::endl;
@@ -3487,6 +3549,7 @@ scene::SSkinMeshBuffer* addAN8MeshBuffer(an8::an8_project* p, scene::ISkinnedMes
             v.Color.set(vert_color.color);
 
             vertices.push_back(v);
+            tmp_meshbuffer_data.meshbuffer_vertex_id.push_back(pi);
 
             //Note: I could optimize a little by giving each vertex and id and only adding it if its
             //      not already in the array but I am not doing it because I want to set multiple normals
@@ -3659,6 +3722,7 @@ bool getAN8BoneNode(an8::an8_project* p, scene::ISkinnedMesh* AnimatedMesh, scen
                 if(i == n_obj->meshList_index[m_index])
                 {
                     n_obj->meshBufferList.push_back(meshBuffer);
+                    n_obj->meshBufferData.push_back(tmp_meshbuffer_data);
                     n_obj->base_bone = bone.name;
 
                     //apply named object transformations from figure view
@@ -3865,7 +3929,7 @@ scene::IAnimatedMesh* loadAN8Scene(IrrlichtDevice* device, an8::an8_project a_fi
                                 vert_weight->buffer_id = mesh_buffer_id;
                                 vert_weight->vertex_id = vert_index;
 
-                                vert_weight->strength = an8_calculate_figure_transform(&vertex, &a_file.irr_joint_data[n], (vert_index==39)*11);
+                                vert_weight->strength = an8_calculate_figure_transform(&vertex, &a_file.irr_joint_data[n], n_obj->meshBufferData[mbuffer_index].meshbuffer_vertex_id[vert_index], figure.useWeights );
 
                                 if(meshBuffer_figure_transform_calculated < 0)
                                     mesh_buffer->Vertices_Standard[vert_index] = vertex;
