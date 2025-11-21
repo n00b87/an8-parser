@@ -1821,6 +1821,13 @@ int getBone(an8_bone* bone, an8_file_block* block)
     getBase(&base, block);
     bone->orientation = base.orientation;
 
+    bone->influence.center0 = 0;
+    bone->influence.center1 = 0;
+    bone->influence.inRadius0 = 0;
+    bone->influence.inRadius1 = 0;
+    bone->influence.outRadius0 = 0;
+    bone->influence.outRadius1 = 0;
+
     int ret_val = 0;
 
     getComponent(&bone->component, block);
@@ -3083,16 +3090,9 @@ irr::f32 an8_calculate_figure_transform(video::S3DVertex* vertex, an8::an8_irr_j
                         return joint_data->bone.component[i].named_object.meshWeights[0].vertexWeight[vert_index].boneWeight[0].weight;
                     }
                 }
-                //std::cout << "DEBUG: " << vert_index << ", " << joint_data->bone.component[i].named_object.meshWeights[0].vertexWeight.size() << std::endl;
             }
         }
     }
-
-    //if(useWeights)
-    //{
-        //std::cout << "NO BUENO: " << vert_index << std::endl;
-        //return 0.1;
-    //}
 
 
     //Anim8or weight capsule (NOTE: I call it a capsule but one end can have a larger radius than the other)
